@@ -1781,6 +1781,7 @@ function renderTabOrderList(){
 let map, markersLayer, lineLayer;
 let pickedForDistance = [];
 const wikiCache = {};
+const photoCache = {};
 
 /* ---------- HELPERS ---------- */
 function minToHHMM(m){ const h=Math.floor(m/60), mm=m%60; return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0"); }
@@ -1886,23 +1887,47 @@ function refreshTrip(){ renderBudget(); renderItinerary(); renderMap(); renderTi
 function visibleItems(day){ return day.items.filter(it=>it.pri<=pace && matchesInterest(it) && itemPassesFilters(it)); }
 function paceLabelText(p){ return p===1?"Spokojne":p===2?"Umiarkowane":"Intensywne"; }
 
-async function fetchWikiImage(title){
+async function fetchWikiSummary(title){
   if(title in wikiCache) return wikiCache[title];
   try{
     const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
     if(!res.ok) throw new Error("no page");
     const data = await res.json();
     const src = (data.thumbnail && data.thumbnail.source) || (data.originalimage && data.originalimage.source) || null;
-    wikiCache[title] = {src, page: data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page};
+    wikiCache[title] = src ? {src, page: data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page} : null;
   }catch(e){ wikiCache[title] = null; }
   return wikiCache[title];
 }
+// Zdjęcie z Wikipedii: jeśli plik wycieczki podaje dokładny tytuł artykułu
+// (it.wiki), próbujemy go najpierw — to szybka ścieżka dla starannie
+// przygotowanych wycieczek. Gdy go brak, albo się nie zgadza (błędny/nieistniejący
+// tytuł — zdarza się przy wycieczkach wygenerowanych bez dostępu do internetu),
+// szukamy sami po nazwie miejsca, tak samo jak przy ciekawostkach — więc literówka
+// czy zmyślony tytuł w pliku wycieczki nie kończy się brakiem albo złym zdjęciem.
+async function resolveItemPhoto(it){
+  if(it.id in photoCache) return photoCache[it.id];
+  let info = it.wiki ? await fetchWikiSummary(it.wiki) : null;
+  if(!info){
+    try{
+      const query = it.mapsQuery || it.name;
+      const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`);
+      if(searchRes.ok){
+        const searchData = await searchRes.json();
+        const preferred = pickBestWikiMatch(searchData.query?.search, query);
+        if(preferred) info = await fetchWikiSummary(preferred.title);
+      }
+    }catch(e){}
+  }
+  photoCache[it.id] = info || null;
+  return photoCache[it.id];
+}
 
 async function hydrateImages(scopeSelector){
-  const anchors = document.querySelectorAll((scopeSelector||"")+" a.photo[data-wiki]");
+  const anchors = document.querySelectorAll((scopeSelector||"")+" a.photo[data-item-id]");
   for(const a of anchors){
-    const title = a.dataset.wiki;
-    const info = await fetchWikiImage(title);
+    const it = DAYS.flatMap(d=>d.items).find(x=>x.id===a.dataset.itemId);
+    if(!it) continue;
+    const info = await resolveItemPhoto(it);
     if(info && info.src){
       a.querySelector("img").src = info.src;
       a.classList.remove("loading");
@@ -2146,6 +2171,36 @@ function splitFacts(text){
   const sentences=clean.match(/[^.!?]+[.!?]+/g)||[clean];
   return sentences.map(x=>x.trim()).filter(x=>x.length>35).slice(0,4);
 }
+// Wspólna funkcja do wyszukiwania w Wikipedii: zamiast ufać tylko pierwszemu
+// wynikowi (trafne tylko przypadkiem), liczymy nakładanie się słów zapytania
+// i tytułu kandydata, bierzemy najlepiej dopasowany — o ile przekracza sensowny
+// próg pewności, inaczej lepiej zgłosić brak trafienia niż pokazać zły artykuł.
+function pickBestWikiMatch(candidates, query, stripWords){
+  const strip = (stripWords||[]).map(w=>w.toLowerCase());
+  const qWords = query.toLowerCase().split(/\s+/).map(w=>w.trim())
+    .filter(w=>w.length>2 && !strip.includes(w));
+  let best=null, bestScore=0;
+  (candidates||[]).forEach(x=>{
+    const t=(x.title||"").toLowerCase();
+    const score=qWords.reduce((s,w)=> s + (t.includes(w)?1:0), 0);
+    if(score>bestScore){ bestScore=score; best=x; }
+  });
+  return bestScore>=1 ? best : null;
+}
+async function searchPlWikiFacts(searchQuery, cityStrip){
+  try{
+    const searchRes=await fetch(`https://pl.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&srlimit=5&format=json&origin=*`);
+    if(!searchRes.ok) return null;
+    const searchData=await searchRes.json();
+    const preferred=pickBestWikiMatch(searchData.query?.search, searchQuery, cityStrip?[cityStrip]:[]);
+    if(!preferred) return null;
+    const res=await fetch(`https://pl.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(preferred.title)}`);
+    if(!res.ok) return null;
+    const data=await res.json();
+    const facts=splitFacts(data.extract);
+    return facts.length ? {facts, title:preferred.title} : null;
+  }catch(e){ return null; }
+}
 async function openFactsModal(id){
   const it=DAYS.flatMap(d=>d.items).find(x=>x.id===id);
   if(!it) return;
@@ -2156,37 +2211,15 @@ async function openFactsModal(id){
   if(factCache[id]){ renderFacts(body,it,factCache[id].facts,factCache[id].source); return; }
   let facts=[];
   let source="Informacje o miejscu z planu podróży";
+  const cityName = (ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.city) || "";
   const target=FACT_TARGETS[id] || it.name;
-  if(target){
-    try{
-      let searchQuery=target;
-      const searchRes=await fetch(`https://pl.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&srlimit=5&format=json&origin=*`);
-      if(searchRes.ok){
-        const searchData=await searchRes.json();
-        const candidates=(searchData.query?.search||[]);
-        // Zamiast dopasowywać tylko pierwsze słowo zapytania (co dawało trafne
-        // wyniki tylko przypadkiem), liczymy nakładanie się słów zapytania i
-        // tytułu kandydata i bierzemy najlepiej dopasowany, o ile przekracza
-        // sensowny próg pewności — inaczej lepiej użyć fallbacku niż złego artykułu.
-        const qWords=target.toLowerCase().replace(/barcelona/g,"").split(/\s+/).map(w=>w.trim()).filter(w=>w.length>2);
-        let best=null, bestScore=0;
-        candidates.forEach(x=>{
-          const t=(x.title||"").toLowerCase();
-          const score=qWords.reduce((s,w)=> s + (t.includes(w)?1:0), 0);
-          if(score>bestScore){ bestScore=score; best=x; }
-        });
-        const preferred = (bestScore>=1 ? best : null);
-        if(preferred){
-          const res=await fetch(`https://pl.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(preferred.title)}`);
-          if(res.ok){
-            const data=await res.json();
-            facts=splitFacts(data.extract);
-            if(facts.length) source=`Wikipedia · ${preferred.title}`;
-          }
-        }
-      }
-    }catch(e){}
-  }
+  // Pierwsza próba: fraza z pliku wycieczki (jeśli jest). Gdy nie da trafnego
+  // wyniku, a różni się od nazwy pozycji w planie, próbujemy jeszcze raz samą
+  // nazwą — dzięki temu błędna/nieprecyzyjna fraza w pliku nie blokuje dobrego
+  // trafienia, które i tak dałoby wyszukanie po prostej nazwie miejsca.
+  let found = target ? await searchPlWikiFacts(target, cityName) : null;
+  if(!found && target!==it.name){ found = await searchPlWikiFacts(it.name, cityName); }
+  if(found){ facts=found.facts; source=`Wikipedia · ${found.title}`; }
   // Jeżeli dokładne miejsce nie ma sensownego wpisu, korzystamy z wcześniej
   // przypisanej najbliższej okolicy zamiast z opisu przypadkowej atrakcji.
   if(!facts.length && FACT_FALLBACKS[target]){
@@ -2215,11 +2248,11 @@ function buildItemCard(it, showCatBadge, collapsible=false){
   div.id = "item-"+it.id;
   div.className = "item pri-"+it.pri+(shown?"":" dim")+(isDone?" visited":"")+(collapsible?" collapsible collapsed":"");
   div.style.borderLeft = `5px solid ${CAT_COLORS[it.cat]}`;
-  const photoHtml = it.wiki ? `
-    <a class="photo loading" data-wiki="${it.wiki}" target="_blank" rel="noopener" title="Otwórz w Wikipedii">
-      <img src="" alt="${it.name}">
+  const photoHtml = `
+    <a class="photo loading" data-item-id="${it.id}" target="_blank" rel="noopener" title="Otwórz w Wikipedii">
+      <img alt="${it.name}">
       <span class="credit">Wikipedia ↗</span>
-    </a>` : "";
+    </a>`;
   const priLabel = it.pri===1?"obowiązkowe":it.pri===2?"zalecane":"jeśli starczy czasu";
   const compactHeader = collapsible ? `
     <div class="item-toggle" role="button" tabindex="0" aria-expanded="false" aria-label="Rozwiń: ${it.name}">
@@ -3795,8 +3828,8 @@ Najwyższy poziom obiektu JSON:
   "rainAlternatives": { "d1": "tekst podpowiedzi na deszczowy dzień 1", "d2": "..." },
   "dayRoutes": { "d1": {"start":"jak dojechać z hotelu do pierwszej atrakcji dnia 1","end":"jak wrócić z ostatniej atrakcji do hotelu"} },
   "parkingSuggestions": { "d1": {"name":"nazwa parkingu","note":"krótka uwaga (cena, typ, odległość od atrakcji)","mapsQuery":"fraza do Google Maps"} }  // TYLKO gdy trip.transportMode = "car" — jeden wpis na dzień, blisko atrakcji TEGO KONKRETNEGO dnia (nie zawsze blisko hotelu, bo dzień może być w innej części miasta); pomiń dla pozostałych form podróży,
-  "factTargets": { "d1-1": "fraza do wyszukania w polskiej Wikipedii dla tej pozycji" },
-  "factFallbacks": { "fraza z factTargets": ["fakt 1.", "fakt 2.", "fakt 3."] }  // opcjonalny fallback, gdy wyszukiwanie w Wikipedii nie znajdzie sensownego artykułu
+  "factTargets": { "d1-1": "fraza do wyszukania w polskiej Wikipedii dla tej pozycji" }  // opcjonalne — patrz uwaga niżej o "ciekawostkach",
+  "factFallbacks": { "fraza z factTargets": ["fakt 1.", "fakt 2.", "fakt 3."] }  // opcjonalne — dodaj TYLKO fakty, których jesteś naprawdę pewien (patrz niżej), inaczej pomiń całe pole
 }
 
 "trip" (obiekt):
@@ -3835,7 +3868,7 @@ Pozycja w "items" (jedna atrakcja/posiłek/przejazd w danym dniu):
   "tags": ["klucze z listy zainteresowań, opcjonalnie"],
   "kid": true/false (opcjonalnie — oznacza "super dla dziecka"),
   "budget": [ {"cat":"transport"|"bilety"|"posilki"|"inne", "family": kwota_w_walucie_dla_CAŁEJ_rodziny_na_raz, "label":"krótki opis"} ]  // opcjonalne, pomiń gdy pozycja jest bezpłatna,
-  "wiki": "Dokładny_tytuł_artykułu_na_en.wikipedia.org (spacje jako podkreślenia)"  // opcjonalne, do zdjęcia,
+  "wiki": "Dokładny_tytuł_artykułu_na_en.wikipedia.org (spacje jako podkreślenia)"  // opcjonalne — jeśli nie jesteś pewien dokładnego tytułu, POMIŃ to pole zamiast zgadywać: aplikacja i tak sama wyszuka zdjęcie po nazwie miejsca ("name"/"mapsQuery"), więc błędnie zgadnięty tytuł tylko ryzykuje pokazanie złego zdjęcia zamiast żadnego,
   "mapsQuery": "fraza do wyszukania w Google Maps",
   "desc": "2-4 zdania opisu, po polsku, konkretne i praktyczne — nie ogólnikowe",
   "arr": {"text": "jak dojechać z poprzedniego punktu (konkretny środek transportu i orientacyjny czas)", "ticket": "cena/rodzaj biletu, HTML <b> dozwolony do pogrubień", "time": liczba_minut_dojazdu}
@@ -3854,7 +3887,8 @@ WYMAGANIA JAKOŚCIOWE (bardzo ważne):
    - "plane": dzień 1 zaczyna się dojazdem z lotniska do hotelu, ostatni dzień kończy się dojazdem do lotniska — tak jak dotychczas. W pozostałych dniach po mieście poruszacie się transportem miejskim (metro/autobus/pieszo/taksówka).
    - "train"/"bus": analogicznie, ale zamiast lotniska użyj dworca kolejowego/autobusowego jako punktu przyjazdu/wyjazdu. Reszta dni — transport miejski, tak jak przy samolocie.
    - "car": dzień 1 zaczyna się przyjazdem własnym autem prosto pod hotel (albo na pobliski parking, jeśli hotel nie ma własnego), ostatni dzień kończy się wyjazdem samochodem. W dayRoutes każdego dnia opisz dojazd do pierwszej atrakcji SAMOCHODEM (nie metrem), i uzupełnij "parkingSuggestions" dla tego dnia — miejsce blisko atrakcji zaplanowanych na ten dzień, nie tylko blisko hotelu. W polach "arr" pozycji w ciągu dnia też preferuj przejazd autem tam, gdzie to sensowne (krótkie, piesze odległości między sąsiednimi atrakcjami zostaw pieszo).
-9. Odpowiedz WYŁĄCZNIE gotowym plikem JSON (zapisz go i podaj mi do pobrania) — bez dodatkowych pytań, chyba że któryś z podanych niżej parametrów jest sprzeczny lub czegoś kluczowego brakuje.`;
+9. Odpowiedz WYŁĄCZNIE gotowym plikem JSON (zapisz go i podaj mi do pobrania) — bez dodatkowych pytań, chyba że któryś z podanych niżej parametrów jest sprzeczny lub czegoś kluczowego brakuje.
+10. WAŻNE — "wiki", "factTargets" i "factFallbacks" to tylko podpowiedzi, nie jedyne źródło: aplikacja sama, na żywo, wyszukuje zdjęcie i ciekawostki w Wikipedii po nazwie miejsca, więc te trzy pola NIE MUSZĄ być idealne. Zdecydowanie lepiej pominąć któreś z nich niż zgadywać: zmyślony tytuł artykułu albo zmyślona "ciekawostka" (nieprawdziwa data, liczba, wydarzenie) wygląda wiarygodnie, ale wprowadza w błąd — a pominięte pole aplikacja i tak sama uzupełni wyszukiwaniem albo opisem pozycji ("desc"). Podawaj je tylko wtedy, gdy jesteś naprawdę pewien, że są poprawne.`;
 
 const CT_TRANSPORT_NOUN = {plane:"Samolot", car:"Samochód", train:"Pociąg", bus:"Autobus"};
 function buildTripCreationPrompt(){

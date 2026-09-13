@@ -261,6 +261,9 @@
   .day-route .route-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin-bottom:4px}
   .day-route .route-main{font-size:13.5px;line-height:1.45;color:var(--ink)}
   .day-route .route-main b{color:var(--heading)}
+  .day-route .route-parking{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft)}
+  .day-route .route-parking b{color:var(--heading)}
+  .day-route .route-parking .maplink{margin-left:4px}
 
   .item-facts-btn{border:1px solid rgba(27,70,100,.28);background:rgba(255,253,247,.82);color:var(--heading);border-radius:9px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
   .item-facts-btn:hover{background:var(--paper-2);border-color:var(--blue)}
@@ -645,7 +648,7 @@
       <div class="header-details-inner">
         <div class="eyebrow" id="tripEyebrow">Rodzinny wyjazd</div>
         <div class="meta" id="tripMeta"></div>
-        <div class="flight-status-note">Numer konkretnego lotu poznacie dopiero po odprawie/e-bilecie — wyszukiwarka pomoże znaleźć aktualne opóźnienia po trasie i dacie. To zwykłe wyszukiwanie, nie śledzenie lotu na żywo.</div>
+        <div class="flight-status-note" id="flightStatusNote">Numer konkretnego lotu poznacie dopiero po odprawie/e-bilecie — wyszukiwarka pomoże znaleźć aktualne opóźnienia po trasie i dacie. To zwykłe wyszukiwanie, nie śledzenie lotu na żywo.</div>
       </div>
     </div>
   </div>
@@ -871,12 +874,18 @@
         <div class="ct-form">
           <div class="ct-row">
             <label>Miasto i kraj<input type="text" id="ctCity" placeholder="np. Rzym, Włochy"></label>
-            <label>Miasto wylotu<input type="text" id="ctHomeCity" placeholder="np. Warszawa"></label>
+            <label>Miejscowość startowa (skąd wyjeżdżacie)<input type="text" id="ctHomeCity" placeholder="np. Warszawa"></label>
           </div>
           <div class="ct-row">
             <label>Data rozpoczęcia<input type="date" id="ctDateStart"></label>
             <label>Data zakończenia<input type="date" id="ctDateEnd"></label>
           </div>
+          <label>Forma podróży<select id="ctTransportMode">
+            <option value="plane" selected>✈ Samolot</option>
+            <option value="car">🚗 Samochód</option>
+            <option value="train">🚆 Pociąg</option>
+            <option value="bus">🚌 Autobus</option>
+          </select></label>
           <div class="ct-row">
             <label>Liczba dorosłych<input type="number" id="ctAdults" min="1" value="2"></label>
             <label>Waluta<select id="ctCurrency">
@@ -893,7 +902,8 @@
           </div>
 
           <label>Hotel / preferowana dzielnica (jeśli już wiadomo)<input type="text" id="ctHotelArea" placeholder="np. jeszcze nie wiadomo / okolice centrum"></label>
-          <label>Loty (linia, orientacyjne godziny — jeśli już wiadomo)<textarea id="ctFlights" rows="2" placeholder="np. jeszcze nie wiadomo, albo: Ryanair, wylot rano, powrót wieczorem"></textarea></label>
+          <label id="ctFlightsLabel">Loty (linia, orientacyjne godziny — jeśli już wiadomo)<textarea id="ctFlights" rows="2" placeholder="np. jeszcze nie wiadomo, albo: Ryanair, wylot rano, powrót wieczorem"></textarea></label>
+          <p class="pace-hint" id="ctCarHint" style="display:none">🚗 Aplikacja sama zaproponuje dojazd samochodem i podpowie, gdzie zostawić auto blisko atrakcji każdego dnia.</p>
 
           <label>Tempo zwiedzania<select id="ctPace">
             <option value="spokojne">Spokojne</option>
@@ -1032,7 +1042,8 @@ function normalizeTripPack(ext){
     days,
     prep: ext.prep || [], packing: ext.packing || [], extras: ext.extras || [],
     quiz: ext.quiz || [], rainAlternatives: ext.rainAlternatives || {}, dayRoutes: ext.dayRoutes || {},
-    factTargets: ext.factTargets || {}, factFallbacks: ext.factFallbacks || {}
+    factTargets: ext.factTargets || {}, factFallbacks: ext.factFallbacks || {},
+    parkingSuggestions: ext.parkingSuggestions || {}
   };
 }
 // Odwrotność normalizeTripPack — z wewnętrznego kształtu (jakiego używa silnik)
@@ -1054,7 +1065,8 @@ function denormalizeTripPack(internal){
     })),
     prep: internal.prep, packing: internal.packing, extras: internal.extras,
     quiz: internal.quiz, rainAlternatives: internal.rainAlternatives, dayRoutes: internal.dayRoutes,
-    factTargets: internal.factTargets, factFallbacks: internal.factFallbacks
+    factTargets: internal.factTargets, factFallbacks: internal.factFallbacks,
+    parkingSuggestions: internal.parkingSuggestions || {}
   };
 }
 
@@ -2033,11 +2045,20 @@ let DAY_ROUTES = {
   d7:{start:"Z Hotelu Acta Antibes nie ma porannego dojazdu do pierwszej atrakcji, ponieważ śniadanie, pakowanie i spacer odbywają się przy hotelu. Po wymeldowaniu jedziecie bezpośrednio na lotnisko.", end:"Dzień kończy się na lotnisku El Prat, więc powrót do hotelu nie jest potrzebny. Z hotelu do T1/T2 zaplanowany jest bezpośredni przejazd taksówką ok. 20–30 min."}
 };
 
+let PARKING_SUGGESTIONS = {};
 function buildDayRoute(day, type){
   const r=DAY_ROUTES[day.id];
   if(!r) return "";
   const isStart=type==="start";
-  return `<div class="day-route${isStart?"":" end"}"><div class="route-title">${isStart?"🚶 Początek dnia · hotel → pierwsza atrakcja":"🏨 Koniec dnia · ostatnia atrakcja → hotel"}</div><div class="route-main">${isStart?r.start:r.end}</div></div>`;
+  const titleTxt = isStart
+    ? (TRANSPORT_MODE==="car" ? "🚗 Początek dnia · hotel → pierwsza atrakcja" : "🚶 Początek dnia · hotel → pierwsza atrakcja")
+    : "🏨 Koniec dnia · ostatnia atrakcja → hotel";
+  let parkingHtml = "";
+  if(isStart && TRANSPORT_MODE==="car"){
+    const p = PARKING_SUGGESTIONS[day.id];
+    if(p) parkingHtml = `<div class="route-parking">🅿️ Sugerowany parking: <b>${escapeHtml(p.name||"")}</b>${p.note?" — "+escapeHtml(p.note):""} <a class="maplink" href="${gmaps(p.mapsQuery||p.name)}" target="_blank" rel="noopener">📍 Google Maps</a></div>`;
+  }
+  return `<div class="day-route${isStart?"":" end"}"><div class="route-title">${titleTxt}</div><div class="route-main">${isStart?r.start:r.end}</div>${parkingHtml}</div>`;
 }
 
 let FACT_TARGETS = {
@@ -2392,8 +2413,11 @@ function renderMap(){
   let totalKm = 0;
   for(let i=1;i<items.length;i++){ totalKm += haversine(items[i-1],items[i]); }
   const distEl = document.getElementById("distToday");
+  const distNote = TRANSPORT_MODE==="car"
+    ? "realny dojazd samochodem bywa dłuższy zależnie od korków i parkowania"
+    : "realny spacer bywa 20–40% dłuższy, częściowo pokonywany metrem/pociągiem";
   distEl.innerHTML = items.length>1
-    ? `Trasa dnia w linii prostej: <b>${totalKm.toFixed(1)} km</b> między ${items.length} punktami (realny spacer bywa 20–40% dłuższy, częściowo pokonywany metrem/pociągiem).`
+    ? `Trasa dnia w linii prostej: <b>${totalKm.toFixed(1)} km</b> między ${items.length} punktami (${distNote}).`
     : "";
 }
 
@@ -2406,9 +2430,9 @@ function handlePick(it){
 // Publiczny serwer demo OSRM — darmowy, ale bez gwarancji dostępności/limitów,
 // więc zawsze trzymamy w zapasie odległość w linii prostej (haversine) jako fallback.
 let distRequestToken = 0;
-async function fetchWalkingRoute(a,b){
+async function fetchRoute(a,b,profile){
   try{
-    const url = `https://router.project-osrm.org/route/v1/foot/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
+    const url = `https://router.project-osrm.org/route/v1/${profile}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
     const res = await fetch(url);
     if(!res.ok) throw new Error("bad response");
     const data = await res.json();
@@ -2427,17 +2451,22 @@ function renderDistPanel(){
   clearBtn.style.display = pickedForDistance.length? "inline-block":"none";
   hint.style.display = pickedForDistance.length? "none":"block";
   if(pickedForDistance.length===2){
+    const isCar = TRANSPORT_MODE==="car";
+    const profile = isCar ? "driving" : "foot";
+    const modeWord = isCar ? "samochodem" : "pieszo";
+    const modeIcon = isCar ? "🚗" : "🚶";
+    const avgSpeedKmh = isCar ? 30 : 4.5;
     const km = haversine(pickedForDistance[0],pickedForDistance[1]);
-    const walkMin = Math.round(km/4.5*60);
-    result.innerHTML = `${km.toFixed(2)} km w linii prostej · ok. ${walkMin} min pieszo <span class="dist-route-loading">(sprawdzam realną trasę pieszo…)</span>`;
+    const estMin = Math.round(km/avgSpeedKmh*60);
+    result.innerHTML = `${km.toFixed(2)} km w linii prostej · ok. ${estMin} min ${modeWord} <span class="dist-route-loading">(sprawdzam realną trasę ${modeWord}…)</span>`;
     const myToken = ++distRequestToken;
     const [a,b] = pickedForDistance;
-    fetchWalkingRoute(a,b).then(route=>{
+    fetchRoute(a,b,profile).then(route=>{
       if(myToken!==distRequestToken) return; // wybór zmienił się w międzyczasie
       if(route){
-        result.innerHTML = `🚶 <b>${route.km.toFixed(2)} km</b> realną trasą pieszo · ok. <b>${route.min} min</b> <span class="dist-route-sub">(w linii prostej: ${km.toFixed(2)} km)</span>`;
+        result.innerHTML = `${modeIcon} <b>${route.km.toFixed(2)} km</b> realną trasą ${modeWord} · ok. <b>${route.min} min</b> <span class="dist-route-sub">(w linii prostej: ${km.toFixed(2)} km)</span>`;
       } else {
-        result.innerHTML = `${km.toFixed(2)} km w linii prostej · ok. ${walkMin} min pieszo <span class="dist-route-sub">(realna trasa niedostępna offline — to tylko szacunek)</span>`;
+        result.innerHTML = `${km.toFixed(2)} km w linii prostej · ok. ${estMin} min ${modeWord} <span class="dist-route-sub">(realna trasa niedostępna offline — to tylko szacunek)</span>`;
       }
     });
   } else { result.innerHTML = ""; }
@@ -3015,6 +3044,7 @@ function startQuiz(){
 function renderQuiz(){
   const el = document.getElementById("quizArea");
   if(!el) return;
+  if(!QUIZ_QUESTIONS.length){ el.innerHTML = `<p class="pace-hint">Ta wycieczka nie ma jeszcze pytań quizowych.</p>`; return; }
   if(!quizOrder.length){ startQuiz(); return; }
   if(quizIndex >= quizOrder.length){
     el.innerHTML = `<div class="quiz-done"><div class="quiz-done-score">Wynik: ${quizScore} / ${quizOrder.length}</div><button class="chip" id="quizRestartBtn" type="button">Zagraj jeszcze raz</button></div>`;
@@ -3130,9 +3160,10 @@ function buildPrintReport(){
   const eyebrowEl = document.getElementById("tripEyebrow");
   const eyebrowTxt = eyebrowEl ? eyebrowEl.textContent : "Rodzinny wyjazd";
   const metaLines = [];
-  const fmtFlight = (f)=> f ? `${f.from||""} ${f.departTime||""} → ${f.to||""} ${f.arriveTime||""} (${f.date?new Date(f.date+"T00:00:00").toLocaleDateString("pl-PL"):""}${f.airline?", "+f.airline:""})` : "";
-  if(meta.flights && meta.flights.outbound) metaLines.push(`✈ Wylot: ${fmtFlight(meta.flights.outbound)}`);
-  if(meta.flights && meta.flights.return) metaLines.push(`✈ Powrót: ${fmtFlight(meta.flights.return)}`);
+  const tm = transportLegMeta(TRANSPORT_MODE);
+  const fmtFlight = (f)=> f ? `${tm.showRoute ? (f.from||"")+" "+(f.departTime||"")+" → "+(f.to||"")+" "+(f.arriveTime||"") : (f.departTime||"")} (${f.date?new Date(f.date+"T00:00:00").toLocaleDateString("pl-PL"):""}${f.airline?", "+f.airline:""})` : "";
+  if(meta.flights && meta.flights.outbound) metaLines.push(`${tm.icon} ${tm.outLabel}: ${fmtFlight(meta.flights.outbound)}`);
+  if(meta.flights && meta.flights.return) metaLines.push(`${tm.icon} ${tm.retLabel}: ${fmtFlight(meta.flights.return)}`);
   if(meta.hotel) metaLines.push(`🏨 Hotel: ${meta.hotel.name||""}${meta.hotel.address?", "+meta.hotel.address:""}`);
 
   let html = `
@@ -3319,6 +3350,15 @@ function formatTripDateRange(startISO, endISO){
     return `${f.format(s)} – ${fy.format(e)}`;
   }catch(err){ return `${startISO} – ${endISO}`; }
 }
+// Wygląd/etykiety nagłówka i podsumowania różnią się w zależności od wybranej
+// w formularzu tworzenia wycieczki formy podróży (trip.transportMode).
+const TRANSPORT_LEG_META = {
+  plane: {icon:"✈", outLabel:"Wylot", retLabel:"Powrót", showRoute:true,  showStatus:true,  countdownNoun:"wylotu", countdownVerb:"Wylot"},
+  train: {icon:"🚆", outLabel:"Wyjazd pociągiem", retLabel:"Powrót pociągiem", showRoute:true,  showStatus:false, countdownNoun:"wyjazdu", countdownVerb:"Wyjazd"},
+  bus:   {icon:"🚌", outLabel:"Wyjazd autobusem",  retLabel:"Powrót autobusem",  showRoute:true,  showStatus:false, countdownNoun:"wyjazdu", countdownVerb:"Wyjazd"},
+  car:   {icon:"🚗", outLabel:"Wyjazd samochodem", retLabel:"Powrót",            showRoute:false, showStatus:false, countdownNoun:"wyjazdu", countdownVerb:"Wyjazd"}
+};
+function transportLegMeta(mode){ return TRANSPORT_LEG_META[mode] || TRANSPORT_LEG_META.plane; }
 function buildFlightStatusUrl(flight, cityFrom, cityTo){
   const dateTxt = flight.date ? new Date(flight.date+"T00:00:00").toLocaleDateString("pl-PL") : "";
   const q = `status lotu ${flight.airline||""} ${cityFrom} ${cityTo} ${dateTxt}`.replace(/\s+/g," ").trim();
@@ -3350,21 +3390,35 @@ function renderHeaderMeta(){
   document.getElementById("tripEyebrow").textContent = eyebrow;
 
   const homeLabel = (meta.homeCity && meta.homeCity.name) || "start";
+  const tm = transportLegMeta(TRANSPORT_MODE);
   let metaHtml = "";
   if(meta.flights && meta.flights.outbound){
     const f = meta.flights.outbound;
     const dateTxt = f.date ? new Date(f.date+"T00:00:00").toLocaleDateString("pl-PL") : "";
-    metaHtml += `<span>✈ Wylot: <b>${escapeHtml(f.from||"")} ${f.departTime||""} → ${escapeHtml(f.to||"")} ${f.arriveTime||""}</b> (${dateTxt}${f.airline?", "+escapeHtml(f.airline):""}) <a class="flight-status-link" target="_blank" rel="noopener" href="${buildFlightStatusUrl(f, homeLabel, cityLabel)}">sprawdź status ↗</a></span>`;
+    const routeTxt = tm.showRoute ? `${escapeHtml(f.from||"")} ${f.departTime||""} → ${escapeHtml(f.to||"")} ${f.arriveTime||""}` : `${f.departTime||""}`;
+    const statusLink = tm.showStatus ? ` <a class="flight-status-link" target="_blank" rel="noopener" href="${buildFlightStatusUrl(f, homeLabel, cityLabel)}">sprawdź status ↗</a>` : "";
+    metaHtml += `<span>${tm.icon} ${tm.outLabel}: <b>${routeTxt}</b> (${dateTxt}${f.airline?", "+escapeHtml(f.airline):""})${statusLink}</span>`;
   }
   if(meta.flights && meta.flights.return){
     const f = meta.flights.return;
     const dateTxt = f.date ? new Date(f.date+"T00:00:00").toLocaleDateString("pl-PL") : "";
-    metaHtml += `<span>✈ Powrót: <b>${escapeHtml(f.from||"")} ${f.departTime||""} → ${escapeHtml(f.to||"")} ${f.arriveTime||""}</b> (${dateTxt}${f.airline?", "+escapeHtml(f.airline):""}) <a class="flight-status-link" target="_blank" rel="noopener" href="${buildFlightStatusUrl(f, cityLabel, homeLabel)}">sprawdź status ↗</a></span>`;
+    const routeTxt = tm.showRoute ? `${escapeHtml(f.from||"")} ${f.departTime||""} → ${escapeHtml(f.to||"")} ${f.arriveTime||""}` : `${f.departTime||""}`;
+    const statusLink = tm.showStatus ? ` <a class="flight-status-link" target="_blank" rel="noopener" href="${buildFlightStatusUrl(f, cityLabel, homeLabel)}">sprawdź status ↗</a>` : "";
+    metaHtml += `<span>${tm.icon} ${tm.retLabel}: <b>${routeTxt}</b> (${dateTxt}${f.airline?", "+escapeHtml(f.airline):""})${statusLink}</span>`;
   }
   if(meta.hotel){
     metaHtml += `<span>🏨 Hotel: <b>${escapeHtml(meta.hotel.name||"")}</b>${meta.hotel.address?", "+escapeHtml(meta.hotel.address):""}</span>`;
   }
   document.getElementById("tripMeta").innerHTML = metaHtml;
+
+  const headerToggleBtn = document.getElementById("headerToggleBtn");
+  if(headerToggleBtn){
+    headerToggleBtn.title = "Szczegóły podróży, hotelu i grupy";
+    const icon = headerToggleBtn.querySelector("span");
+    if(icon) icon.textContent = tm.icon + "️";
+  }
+  const flightStatusNote = document.getElementById("flightStatusNote");
+  if(flightStatusNote) flightStatusNote.style.display = tm.showStatus ? "" : "none";
 }
 
 function renderCountdown(){
@@ -3373,9 +3427,10 @@ function renderCountdown(){
   const diffMs = TRIP_START - now;
   const days = Math.ceil(diffMs/86400000);
   chip.classList.toggle("urgent", days>=0 && days<=7);
-  if(days > 1){ chip.textContent = `✈ Do wylotu zostało ${days} dni`; }
-  else if(days === 1){ chip.textContent = `✈ Wylot jutro!`; }
-  else if(days === 0){ chip.textContent = `✈ Dziś wylot — udanej podróży!`; }
+  const tm = transportLegMeta(TRANSPORT_MODE);
+  if(days > 1){ chip.textContent = `${tm.icon} Do ${tm.countdownNoun} zostało ${days} dni`; }
+  else if(days === 1){ chip.textContent = `${tm.icon} ${tm.countdownVerb} jutro!`; }
+  else if(days === 0){ chip.textContent = `${tm.icon} Dziś ${tm.countdownVerb.toLowerCase()} — udanej podróży!`; }
   else {
     if(now < TRIP_END){ chip.textContent = `🌅 Jesteście w trakcie wyjazdu!`; }
     else { chip.textContent = `📷 Wyjazd za Wami — miłych wspomnień!`; }
@@ -3488,6 +3543,7 @@ if(legacyMigrationHappened && !tripPacks["barcelona-2026"]){
 const hasAnyTrip = Object.keys(tripPacks).length > 0;
 let ACTIVE_TRIP = null;
 let TRIP_START = null, TRIP_END = null;
+let TRANSPORT_MODE = "plane";
 
 if(hasAnyTrip){
   if(!tripPacks[activeTripId]){ activeTripId = Object.keys(tripPacks)[0]; localStorage.setItem("activeTripId", activeTripId); }
@@ -3499,10 +3555,15 @@ if(hasAnyTrip){
   RAIN_ALTERNATIVES = ACTIVE_TRIP.rainAlternatives; DAY_ROUTES = ACTIVE_TRIP.dayRoutes;
   FACT_TARGETS = ACTIVE_TRIP.factTargets; FACT_FALLBACKS = ACTIVE_TRIP.factFallbacks;
   HOTEL = ACTIVE_TRIP.hotel; INTERESTS = ACTIVE_TRIP.interests || DEFAULT_INTERESTS;
+  // Starsze wycieczki (sprzed tej funkcji) nie mają transportMode zapisanego —
+  // domyślnie traktujemy je jak dotychczas, czyli jako dojazd samolotem.
+  TRANSPORT_MODE = ACTIVE_TRIP.meta.transportMode || "plane";
+  PARKING_SUGGESTIONS = ACTIVE_TRIP.parkingSuggestions || {};
 
+  const destSuffix = TRANSPORT_MODE==="plane" ? " (przylot)" : TRANSPORT_MODE==="car" ? " (dojazd)" : " (przyjazd)";
   WX_CITIES = {
-    home: (ACTIVE_TRIP.meta.homeCity) || {lat:0,lng:0,name:"Wylot"},
-    dest: {lat: HOTEL.lat, lng: HOTEL.lng, name: (ACTIVE_TRIP.meta.city||"Cel")+" (przylot)"}
+    home: (ACTIVE_TRIP.meta.homeCity) || {lat:0,lng:0,name:"Start"},
+    dest: {lat: HOTEL.lat, lng: HOTEL.lng, name: (ACTIVE_TRIP.meta.city||"Cel")+destSuffix}
   };
   // TRIP_START/TRIP_END napędzają licznik dni do wylotu — liczone z lotów, jeśli
   // są podane, inaczej z samych dat wycieczki (bez godziny lotu).
@@ -3688,6 +3749,27 @@ document.getElementById("ctCurrency").addEventListener("change",(e)=>{
   document.getElementById("ctCurrencyOtherWrap").style.display = e.target.value==="inna" ? "block" : "none";
 });
 
+const CT_FLIGHTS_LABEL_TXT = {
+  plane: "Loty (linia, orientacyjne godziny — jeśli już wiadomo)",
+  train: "Połączenia kolejowe (przewoźnik, orientacyjne godziny — jeśli już wiadomo)",
+  bus: "Połączenia autobusowe (przewoźnik, orientacyjne godziny — jeśli już wiadomo)"
+};
+function syncCtTransportModeUI(){
+  const mode = document.getElementById("ctTransportMode").value;
+  const label = document.getElementById("ctFlightsLabel");
+  const carHint = document.getElementById("ctCarHint");
+  if(mode==="car"){
+    label.style.display = "none";
+    carHint.style.display = "block";
+  } else {
+    label.style.display = "";
+    carHint.style.display = "none";
+    label.firstChild.textContent = CT_FLIGHTS_LABEL_TXT[mode] || CT_FLIGHTS_LABEL_TXT.plane;
+  }
+}
+document.getElementById("ctTransportMode").addEventListener("change", syncCtTransportModeUI);
+syncCtTransportModeUI();
+
 let ctInterestsSelected = {};
 function renderCtInterestChips(){
   const el = document.getElementById("ctInterestChips");
@@ -3719,6 +3801,7 @@ Najwyższy poziom obiektu JSON:
   "quiz": [ {"q":"pytanie?", "options":["poprawna odpowiedź","dystraktor 1","dystraktor 2"], "correct":0} ],
   "rainAlternatives": { "d1": "tekst podpowiedzi na deszczowy dzień 1", "d2": "..." },
   "dayRoutes": { "d1": {"start":"jak dojechać z hotelu do pierwszej atrakcji dnia 1","end":"jak wrócić z ostatniej atrakcji do hotelu"} },
+  "parkingSuggestions": { "d1": {"name":"nazwa parkingu","note":"krótka uwaga (cena, typ, odległość od atrakcji)","mapsQuery":"fraza do Google Maps"} }  // TYLKO gdy trip.transportMode = "car" — jeden wpis na dzień, blisko atrakcji TEGO KONKRETNEGO dnia (nie zawsze blisko hotelu, bo dzień może być w innej części miasta); pomiń dla pozostałych form podróży,
   "factTargets": { "d1-1": "fraza do wyszukania w polskiej Wikipedii dla tej pozycji" },
   "factFallbacks": { "fraza z factTargets": ["fakt 1.", "fakt 2.", "fakt 3."] }  // opcjonalny fallback, gdy wyszukiwanie w Wikipedii nie znajdzie sensownego artykułu
 }
@@ -3729,11 +3812,16 @@ Najwyższy poziom obiektu JSON:
   "dateStart": "RRRR-MM-DD", "dateEnd": "RRRR-MM-DD", "timezone": "np. Europe/Rome", "currency": "EUR",
   "family": {"adults": liczba, "children": [{"age": liczba}, ...]},
   "hotel": {"name":"...", "address":"...", "lat":0.0, "lng":0.0, "note":"opcjonalny komentarz"},
-  "homeCity": {"name":"Miasto wylotu (wylot)", "lat":0.0, "lng":0.0},
+  "homeCity": {"name":"Miejscowość startowa", "lat":0.0, "lng":0.0},
+  "transportMode": "plane" | "car" | "train" | "bus"  // forma dotarcia do miasta, wybrana w formularzu — wpływa na resztę pliku, patrz niżej,
   "flights": {
-    "outbound": {"from":"KOD","to":"KOD","date":"RRRR-MM-DD","departTime":"HH:MM","arriveTime":"HH:MM","airline":"linia, np. bezpośredni"},
-    "return": {"from":"KOD","to":"KOD","date":"RRRR-MM-DD","departTime":"HH:MM","arriveTime":"HH:MM","airline":"..."}
+    "outbound": {"from":"...","to":"...","date":"RRRR-MM-DD","departTime":"HH:MM","arriveTime":"HH:MM","airline":"..."},
+    "return": {"from":"...","to":"...","date":"RRRR-MM-DD","departTime":"HH:MM","arriveTime":"HH:MM","airline":"..."}
   }
+  // Znaczenie pól "flights" zależy od transportMode:
+  // - "plane": from/to = kody lotnisk (IATA), airline = linia lotnicza. Jak dotychczas.
+  // - "train"/"bus": from/to = nazwy dworca/stacji wyjazdu i przyjazdu (nie kody), airline = nazwa przewoźnika.
+  // - "car": pomiń from/to i airline (brak sensu przy własnym aucie) — zostaw tylko date/departTime dla outbound i date/arriveTime dla return, żeby aplikacja mogła policzyć odliczanie dni.
 }
 
 "days" (tablica obiektów, jeden na dzień wycieczki):
@@ -3769,8 +3857,13 @@ WYMAGANIA JAKOŚCIOWE (bardzo ważne):
 5. Ceny/opisy/uwagi po polsku, konkretne i przydatne (jak w przewodniku turystycznym pisanym przez kogoś, kto zna miasto), nie ogólnikowe frazesy.
 6. "quiz" — 8-16 pytań opartych na miejscach z przygotowanego planu, z dokładnie 3 opcjami, poprawna zawsze na indeksie 0 (aplikacja sama je losowo tasuje).
 7. "prep" i "packing" dopasuj do specyfiki tego miasta/pory roku/rodziny (np. wymogi ubioru w miejscach kultu, sezonowa pogoda, atrakcje wymagające rezerwacji z wyprzedzeniem).
-8. Odpowiedz WYŁĄCZNIE gotowym plikem JSON (zapisz go i podaj mi do pobrania) — bez dodatkowych pytań, chyba że któryś z podanych niżej parametrów jest sprzeczny lub czegoś kluczowego brakuje.`;
+8. Dopasuj "dayRoutes" oraz pole "arr" pierwszej/ostatniej pozycji każdego dnia do wybranej formy podróży (trip.transportMode):
+   - "plane": dzień 1 zaczyna się dojazdem z lotniska do hotelu, ostatni dzień kończy się dojazdem do lotniska — tak jak dotychczas. W pozostałych dniach po mieście poruszacie się transportem miejskim (metro/autobus/pieszo/taksówka).
+   - "train"/"bus": analogicznie, ale zamiast lotniska użyj dworca kolejowego/autobusowego jako punktu przyjazdu/wyjazdu. Reszta dni — transport miejski, tak jak przy samolocie.
+   - "car": dzień 1 zaczyna się przyjazdem własnym autem prosto pod hotel (albo na pobliski parking, jeśli hotel nie ma własnego), ostatni dzień kończy się wyjazdem samochodem. W dayRoutes każdego dnia opisz dojazd do pierwszej atrakcji SAMOCHODEM (nie metrem), i uzupełnij "parkingSuggestions" dla tego dnia — miejsce blisko atrakcji zaplanowanych na ten dzień, nie tylko blisko hotelu. W polach "arr" pozycji w ciągu dnia też preferuj przejazd autem tam, gdzie to sensowne (krótkie, piesze odległości między sąsiednimi atrakcjami zostaw pieszo).
+9. Odpowiedz WYŁĄCZNIE gotowym plikem JSON (zapisz go i podaj mi do pobrania) — bez dodatkowych pytań, chyba że któryś z podanych niżej parametrów jest sprzeczny lub czegoś kluczowego brakuje.`;
 
+const CT_TRANSPORT_NOUN = {plane:"Samolot", car:"Samochód", train:"Pociąg", bus:"Autobus"};
 function buildTripCreationPrompt(){
   const city = document.getElementById("ctCity").value.trim() || "(nie podano — zapytaj mnie o miasto)";
   const homeCity = document.getElementById("ctHomeCity").value.trim() || "(nie podano)";
@@ -3780,7 +3873,16 @@ function buildTripCreationPrompt(){
   let currency = document.getElementById("ctCurrency").value;
   if(currency==="inna") currency = document.getElementById("ctCurrencyOther").value.trim() || "EUR";
   const hotelArea = document.getElementById("ctHotelArea").value.trim() || "jeszcze nie wiadomo — zaproponuj sensowną, dobrze skomunikowaną okolicę";
-  const flights = document.getElementById("ctFlights").value.trim() || "jeszcze nie wiadomo — pomiń szczegóły lotów albo zaproponuj orientacyjne pory";
+  const transportMode = document.getElementById("ctTransportMode").value;
+  const transportNoun = CT_TRANSPORT_NOUN[transportMode] || "Samolot";
+  const flights = document.getElementById("ctFlights").value.trim() || "jeszcze nie wiadomo — pomiń szczegóły albo zaproponuj orientacyjne pory";
+  let transportLine;
+  if(transportMode==="car"){
+    transportLine = `- Forma podróży: Samochód — przyjeżdżamy własnym autem, bez lotu/pociągu/autobusu. W planie zamiast lotniska/dworca uwzględnij dojazd i wyjazd samochodem oraz zaproponuj, gdzie w mieście zostawiać auto (parking) blisko atrakcji każdego dnia (patrz pole "parkingSuggestions" w formacie niżej).`;
+  } else {
+    const detailsLabel = transportMode==="train" ? "Połączenia kolejowe" : transportMode==="bus" ? "Połączenia autobusowe" : "Loty";
+    transportLine = `- Forma podróży: ${transportNoun}\n- ${detailsLabel}: ${flights}`;
+  }
   const paceLabel = document.getElementById("ctPace").selectedOptions[0].textContent;
   const budgetHint = document.getElementById("ctBudgetHint").value.trim() || "brak szczególnych wytycznych — dobierz rozsądnie";
   const notes = document.getElementById("ctNotes").value.trim() || "brak";
@@ -3791,13 +3893,13 @@ function buildTripCreationPrompt(){
 
 ### Parametry mojej wycieczki
 - Miasto docelowe: ${city}
-- Miasto wylotu: ${homeCity}
+- Miejscowość startowa: ${homeCity}
 - Termin: ${dateStart} – ${dateEnd}
 - Liczba dorosłych: ${adults}
 - Dzieci: ${childrenTxt}
 - Waluta: ${currency}
 - Hotel / preferowana dzielnica: ${hotelArea}
-- Loty: ${flights}
+${transportLine}
 - Preferowane tempo zwiedzania: ${paceLabel}
 - Zainteresowania: ${interestLabels.length ? interestLabels.join(", ") : "brak szczególnych preferencji — zaproponuj zrównoważony plan (zabytki, jedzenie, coś dla dzieci)"}
 - Orientacyjny budżet: ${budgetHint}

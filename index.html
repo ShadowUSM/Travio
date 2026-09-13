@@ -1968,6 +1968,35 @@ document.getElementById("viewTabsNav").addEventListener("click",(e)=>{
 document.getElementById("viewTabPrev").addEventListener("click",()=>switchAdjacentTab(-1));
 document.getElementById("viewTabNext").addEventListener("click",()=>switchAdjacentTab(1));
 
+// Przesunięcie palcem w lewo/prawo na treści zmienia główną zakładkę (Plan
+// podróży, Budżet…), tak samo jak strzałki obok paska zakładek. Wyłączone nad
+// mapą, suwakiem tempa, paskiem dni, samym paskiem zakładek i oknem
+// ciekawostek — tam przeciągnięcie ma znaczenie inne niż zmiana zakładki.
+(function setupSwipeViewTabs(){
+  const EXCLUDE_SELECTOR = "input, textarea, select, .leaflet-container, #daytabs, .viewtabs-shell, .facts-modal";
+  const MIN_DX = 60, MAX_DY = 60;
+  let startX = null, startY = null, tracking = false;
+  document.addEventListener("touchstart", (e)=>{
+    tracking = false;
+    if(e.touches.length !== 1) return;
+    if(e.target.closest(EXCLUDE_SELECTOR)) return;
+    const shell = document.getElementById("viewTabsShell");
+    if(!shell || getComputedStyle(shell).display === "none") return;
+    if(document.getElementById("factsModal").classList.contains("open")) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, {passive:true});
+  document.addEventListener("touchend", (e)=>{
+    if(!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX, dy = t.clientY - startY;
+    if(Math.abs(dx) < MIN_DX || Math.abs(dy) > MAX_DY || Math.abs(dx) < Math.abs(dy)) return;
+    switchAdjacentTab(dx < 0 ? 1 : -1);
+  }, {passive:true});
+})();
+
 // Przeciąganie paska zakładek myszką (cursor:grab w CSS sugerował tę funkcję,
 // ale wcześniej nie było logiki, która by ją realizowała).
 // Uwaga: celowo NIE używamy setPointerCapture — przechwycenie wskaźnika na

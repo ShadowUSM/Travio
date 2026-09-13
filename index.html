@@ -1888,10 +1888,13 @@ function refreshTrip(){ renderBudget(); renderItinerary(); renderMap(); renderTi
 function visibleItems(day){ return day.items.filter(it=>it.pri<=pace && matchesInterest(it) && itemPassesFilters(it)); }
 function paceLabelText(p){ return p===1?"Spokojne":p===2?"Umiarkowane":"Intensywne"; }
 
+// Zdjęcia i link "Otwórz w Wikipedii" celowo zawsze prowadzą do polskiej
+// Wikipedii (pl.wikipedia.org), nie angielskiej — to ma być strona, na którą
+// polski użytkownik faktycznie kliknie i przeczyta.
 async function fetchWikiSummary(title){
   if(title in wikiCache) return wikiCache[title];
   try{
-    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+    const res = await fetch(`https://pl.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
     if(!res.ok) throw new Error("no page");
     const data = await res.json();
     const src = (data.thumbnail && data.thumbnail.source) || (data.originalimage && data.originalimage.source) || null;
@@ -1911,10 +1914,11 @@ async function resolveItemPhoto(it){
   if(!info){
     try{
       const query = it.mapsQuery || it.name;
-      const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`);
+      const cityName = (ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.city) || "";
+      const searchRes = await fetch(`https://pl.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`);
       if(searchRes.ok){
         const searchData = await searchRes.json();
-        const preferred = pickBestWikiMatch(searchData.query?.search, query);
+        const preferred = pickBestWikiMatch(searchData.query?.search, query, cityName?[cityName]:[]);
         if(preferred) info = await fetchWikiSummary(preferred.title);
       }
     }catch(e){}
@@ -3907,7 +3911,7 @@ Pozycja w "items" (jedna atrakcja/posiłek/przejazd w danym dniu):
   "tags": ["klucze z listy zainteresowań, opcjonalnie"],
   "kid": true/false (opcjonalnie — oznacza "super dla dziecka"),
   "budget": [ {"cat":"transport"|"bilety"|"posilki"|"inne", "family": kwota_w_walucie_dla_CAŁEJ_rodziny_na_raz, "label":"krótki opis"} ]  // opcjonalne, pomiń gdy pozycja jest bezpłatna,
-  "wiki": "Dokładny_tytuł_artykułu_na_en.wikipedia.org (spacje jako podkreślenia)"  // opcjonalne — jeśli nie jesteś pewien dokładnego tytułu, POMIŃ to pole zamiast zgadywać: aplikacja i tak sama wyszuka zdjęcie po nazwie miejsca ("name"/"mapsQuery"), więc błędnie zgadnięty tytuł tylko ryzykuje pokazanie złego zdjęcia zamiast żadnego,
+  "wiki": "Dokładny_tytuł_artykułu_na_pl.wikipedia.org (spacje jako podkreślenia)"  // opcjonalne — zdjęcie i link "Otwórz w Wikipedii" mają zawsze prowadzić do POLSKIEJ Wikipedii, nie angielskiej. Jeśli nie jesteś pewien dokładnego tytułu, POMIŃ to pole zamiast zgadywać: aplikacja i tak sama wyszuka zdjęcie na pl.wikipedia.org po nazwie miejsca ("name"/"mapsQuery"), więc błędnie zgadnięty tytuł tylko ryzykuje pokazanie złego zdjęcia zamiast żadnego,
   "mapsQuery": "fraza do wyszukania w Google Maps",
   "desc": "2-4 zdania opisu, po polsku, konkretne i praktyczne — nie ogólnikowe",
   "arr": {"text": "jak dojechać z poprzedniego punktu (konkretny środek transportu i orientacyjny czas)", "ticket": "cena/rodzaj biletu, HTML <b> dozwolony do pogrubień", "time": liczba_minut_dojazdu}

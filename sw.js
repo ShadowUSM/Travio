@@ -2,7 +2,7 @@
 // WAŻNE: podbij CACHE_VERSION przy KAŻDEJ zmianie plików z APP_SHELL (w tym ikon!) —
 // przeglądarka wykrywa nową wersję service workera tylko po zmianie BAJTÓW tego pliku,
 // więc bez tego stare, zcache'owane pliki (np. stare logo) zostają na zawsze.
-const CACHE_VERSION = "travio-v3";
+const CACHE_VERSION = "travio-v4";
 const APP_SHELL = [
   "./",
   "./index.html",

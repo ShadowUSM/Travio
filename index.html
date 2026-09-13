@@ -946,7 +946,7 @@
 
 <div id="view-quiz" class="wrap" style="display:none">
   <div class="panel">
-    <h2>Quiz o Barcelonie</h2>
+    <h2 id="quizHeading">Quiz</h2>
     <p class="pace-hint">Pytania o miejsca z Waszego planu — dobre na pociąg, samolot albo wieczór w hotelu. Losowa kolejność za każdym razem.</p>
     <div id="quizArea" style="margin-top:14px"></div>
   </div>
@@ -1716,7 +1716,7 @@ const TABS = [
   {key:"extra", label:"Więcej do zobaczenia"},
   {key:"prep", label:"Przed wyjazdem"},
   {key:"journal", label:"Dziennik podróży"},
-  {key:"quiz", label:"Quiz o Barcelonie"},
+  {key:"quiz", label:"Quiz"},
   {key:"settings", label:"Ustawienia"}
 ];
 let tabOrder = (appPrefs.tabOrder && appPrefs.tabOrder.length===TABS.length) ? appPrefs.tabOrder.slice() : TABS.map(t=>t.key);
@@ -3360,6 +3360,10 @@ function renderHeaderMeta(){
   document.getElementById("tripCityTitle").textContent = cityLabel;
   document.getElementById("tripDatesText").textContent = (meta.dateStart && meta.dateEnd)
     ? formatTripDateRange(meta.dateStart, meta.dateEnd) : "";
+  // Bez odmiany przez przypadki (np. "Barcelona" -> "o Barcelonie") — nie da się tego
+  // niezawodnie wygenerować automatycznie dla dowolnej, dowolnie wpisanej nazwy miasta.
+  const quizHeading = document.getElementById("quizHeading");
+  if(quizHeading) quizHeading.textContent = "Quiz — " + cityLabel;
 
   const adults = (meta.family && meta.family.adults) || 0;
   const children = (meta.family && meta.family.children) || [];

@@ -1703,11 +1703,11 @@ function pulseIconBtn(btn){
 const TABS = [
   {key:"trip", label:"Plan podróży"},
   {key:"budget", label:"Budżet"},
+  {key:"extra", label:"Więcej do zobaczenia"},
   {key:"prep", label:"Przed wyjazdem"},
-  {key:"quiz", label:"Quiz o Barcelonie"},
   {key:"journal", label:"Dziennik podróży"},
-  {key:"settings", label:"Ustawienia"},
-  {key:"extra", label:"Więcej do zobaczenia"}
+  {key:"quiz", label:"Quiz o Barcelonie"},
+  {key:"settings", label:"Ustawienia"}
 ];
 let tabOrder = (appPrefs.tabOrder && appPrefs.tabOrder.length===TABS.length) ? appPrefs.tabOrder.slice() : TABS.map(t=>t.key);
 

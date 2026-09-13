@@ -1,5 +1,5 @@
 // Travio — service worker: cache aplikacji na potrzeby instalacji i pracy offline.
-const CACHE_VERSION = "travio-v1";
+const CACHE_VERSION = "travio-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -13,7 +13,12 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL))
   );
-  self.skipWaiting();
+  // Celowo BEZ self.skipWaiting() — nowa wersja czeka, aż użytkownik kliknie
+  // baner "nowa wersja" w aplikacji, żeby nie podmienić jej pod kimś w trakcie pracy.
+});
+
+self.addEventListener("message", (event) => {
+  if(event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

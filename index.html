@@ -122,7 +122,7 @@
   #printReport{display:none}
 
   @media print{
-    header.top, .viewtabs, #view-trip, #view-budget, #view-prep, #view-quiz, #view-journal, #view-settings, #view-extra, footer, .app-toast, .rain-banner{display:none !important}
+    header.top, .viewtabs, #view-trip, #view-budget, #view-prep, #view-quiz, #view-journal, #view-settings, #view-extra, footer, .app-toast, .rain-banner, .update-banner{display:none !important}
     #printReport{display:block !important}
     body{background:#fff;padding:0;font-size:12px}
     @page{margin:14mm}
@@ -569,6 +569,10 @@
   .app-toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(20px);max-width:min(92vw,440px);background:var(--blue-deep);color:#fff;font-size:13px;line-height:1.4;padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:20000;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease}
   .app-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .app-toast.error{background:var(--brick)}
+  .update-banner{position:fixed;left:0;right:0;top:0;z-index:21000;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;background:var(--gold);color:var(--blue-deep);padding:10px 16px;font-size:13.5px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.18);transform:translateY(-120%);transition:transform .3s ease}
+  .update-banner.show{transform:translateY(0)}
+  .update-banner button{background:var(--blue-deep);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .update-banner button:hover{opacity:.9}
 
   footer{max-width:1180px;margin:26px auto 0;padding:0 18px;font-size:12px;color:var(--ink-soft)}
 
@@ -593,6 +597,11 @@
 </style>
 </head>
 <body>
+
+<div class="update-banner" id="updateBanner" style="display:none">
+  <span>🎉 Dostępna nowa wersja aplikacji</span>
+  <button id="updateBannerBtn" type="button">Odśwież i zobacz zmiany</button>
+</div>
 
 <header class="top">
   <div class="header-decor" aria-hidden="true">
@@ -3852,9 +3861,37 @@ if(hasAnyTrip){
   refreshAllWeather();
 }
 
+// Baner "nowa wersja" — pokazuje się, gdy service worker wykryje, że plik
+// index.html/sw.js na serwerze zmienił się od czasu ostatniego wejścia.
+// Kliknięcie aktywuje nową wersję i przeładowuje stronę.
 if("serviceWorker" in navigator){
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+    navigator.serviceWorker.register("./sw.js").then((reg) => {
+      function showUpdateBanner(worker){
+        const banner = document.getElementById("updateBanner");
+        const btn = document.getElementById("updateBannerBtn");
+        banner.style.display = "flex";
+        requestAnimationFrame(()=> banner.classList.add("show"));
+        btn.onclick = () => worker.postMessage({type:"SKIP_WAITING"});
+      }
+      if(reg.waiting) showUpdateBanner(reg.waiting);
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if(!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          if(newWorker.state === "installed" && navigator.serviceWorker.controller){
+            showUpdateBanner(newWorker);
+          }
+        });
+      });
+    }).catch(()=>{});
+
+    let reloadedOnce = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if(reloadedOnce) return;
+      reloadedOnce = true;
+      location.reload();
+    });
   });
 }
 </script>

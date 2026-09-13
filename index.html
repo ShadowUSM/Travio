@@ -508,8 +508,8 @@
   .budget-bar-stack{display:flex;height:16px;border-radius:8px;overflow:hidden;margin-bottom:18px;background:var(--paper-2)}
   .budget-bar-seg{height:100%;width:0;transition:width .9s cubic-bezier(.2,.8,.3,1)}
 
-  .budget-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
-  .budget-card{border-radius:14px;padding:15px;color:#fff;position:relative;overflow:hidden;transition:transform .2s ease}
+  .budget-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}
+  .budget-card{border-radius:14px;padding:15px;color:#fff;position:relative;overflow:hidden;transition:transform .2s ease;min-width:0}
   .budget-card:hover{transform:translateY(-3px)}
   .budget-card .bc-icon{font-size:22px}
   .budget-card .bc-label{font-size:12px;opacity:.92;margin-top:6px}
@@ -518,10 +518,11 @@
   .budget-breakdown{margin-top:6px}
   .bd-day{margin-bottom:16px}
   .bd-day h4{font-size:12.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:6px;font-weight:700}
-  .bd-line{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0;color:var(--ink)}
-  .bd-line .bd-amt{font-weight:700;color:var(--heading);white-space:nowrap}
+  .bd-line{display:flex;flex-direction:column;gap:3px;font-size:13px;padding:6px 0;color:var(--ink)}
+  .bd-line .bd-amt{font-weight:700;color:var(--heading);display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 
-  .summary-card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .summary-card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:18px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .summary-stat{min-width:0}
   .summary-stat .lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700}
   .summary-stat .val{font-family:'Fraunces',serif;font-size:22px;color:var(--heading);margin-top:2px}
   .summary-stat .sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
@@ -758,7 +759,7 @@
 <div id="view-budget" class="wrap" style="display:none">
   <div class="panel budget-panel">
     <h2>Budżet wycieczki</h2>
-    <p class="pace-hint">Szacunkowe koszty dla całej rodziny (4 osoby) — bez cen samych lotów. Ceny posiłków to symulacja na podstawie średnich cen dań w danym typie lokalu z opisów w planie.</p>
+    <p class="pace-hint" id="budgetIntroHint">Szacunkowe koszty dla całej rodziny — bez cen samych lotów. Ceny posiłków to symulacja na podstawie średnich cen dań w danym typie lokalu z opisów w planie.</p>
 
     <div class="budget-controls">
       <div class="seg-toggle" id="scopeToggle">
@@ -2836,18 +2837,36 @@ document.addEventListener("click",(e)=>{
   }
 });
 
+const CURRENCY_SYMBOLS = {EUR:"€", PLN:"zł"};
+function currencySymbol(c){ return CURRENCY_SYMBOLS[c] || c; }
+// Kurs NBP, jaki wczytujemy (loadNbpRate), to zawsze EUR->PLN — więc przeliczyć
+// "na żywo" umiemy tylko między tymi dwiema walutami. Kwoty w "budget" są zawsze
+// w walucie NATYWNEJ wycieczki (trip.currency), więc dla wycieczek w innej walucie
+// (USD, CHF, GBP...) po prostu pokazujemy je wprost, bez przeliczania.
+function convertNativeTo(amount, toCurrency, nativeCurrency, rate){
+  if(toCurrency===nativeCurrency) return amount;
+  if(rate==null) return null;
+  if(nativeCurrency==="EUR" && toCurrency==="PLN") return amount*rate;
+  if(nativeCurrency==="PLN" && toCurrency==="EUR") return amount/rate;
+  return null;
+}
 function renderBudgetView(){
-  const divisor = budgetPerPerson ? 4 : 1;
-  const usePln = budgetCurrency==="PLN" && nbpRate!=null;
-  const rate = usePln ? nbpRate : 1;
-  const mainSuffix = (usePln ? " zł" : " €") + (budgetPerPerson ? " / os." : "");
-  const otherSuffix = usePln ? " €" : " zł";
+  const familySize = ((ACTIVE_TRIP.meta.family && ACTIVE_TRIP.meta.family.adults)||0)
+    + ((ACTIVE_TRIP.meta.family && ACTIVE_TRIP.meta.family.children && ACTIVE_TRIP.meta.family.children.length)||0);
+  const divisor = budgetPerPerson ? Math.max(1, familySize) : 1;
+  const nativeCurrency = (ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.currency) || "EUR";
+  const canConvert = (nativeCurrency==="EUR" || nativeCurrency==="PLN") && nbpRate!=null;
+  const mainCurrency = canConvert ? budgetCurrency : nativeCurrency;
+  const otherCurrency = mainCurrency==="EUR" ? "PLN" : "EUR";
+  const mainSuffix = " " + currencySymbol(mainCurrency) + (budgetPerPerson ? " / os." : "");
+  const introHint = document.getElementById("budgetIntroHint");
+  if(introHint) introHint.textContent = `Szacunkowe koszty dla całej rodziny (${familySize} ${plForm(familySize,["osoba","osoby","osób"])}) — bez cen samego dojazdu. Ceny posiłków to symulacja na podstawie średnich cen dań w danym typie lokalu z opisów w planie.`;
   const lines = collectBudgetLines().filter(l=>budgetCatsOn[l.cat]);
   const totals = {transport:0,bilety:0,posilki:0,inne:0};
   lines.forEach(l=> totals[l.cat] += l.family);
-  const grand = Object.values(totals).reduce((a,b)=>a+b,0);
-  const grandEur = grand/divisor;
-  const grandShown = grandEur*rate;
+  const grandRaw = Object.values(totals).reduce((a,b)=>a+b,0);
+  const grandNative = grandRaw / divisor;
+  const grandShown = convertNativeTo(grandNative, mainCurrency, nativeCurrency, nbpRate) ?? grandNative;
 
   document.getElementById("budgetScopeLabel").textContent = budgetScope==="trip"
     ? "Suma za cały wyjazd" + (budgetPerPerson? " (na osobę)":"")
@@ -2857,9 +2876,9 @@ function renderBudgetView(){
   animateNumber(grandEl, budgetPrevGrand, grandShown, mainSuffix);
   budgetPrevGrand = grandShown;
   const plnEl = document.getElementById("budgetGrandPLN");
-  if(nbpRate!=null){
-    const otherVal = usePln ? grandEur : grandEur*nbpRate;
-    plnEl.textContent = `≈ ${Math.round(otherVal).toLocaleString("pl-PL")}${otherSuffix}`;
+  const otherVal = canConvert ? convertNativeTo(grandNative, otherCurrency, nativeCurrency, nbpRate) : null;
+  if(otherVal!=null){
+    plnEl.textContent = `≈ ${Math.round(otherVal).toLocaleString("pl-PL")} ${currencySymbol(otherCurrency)}`;
   } else {
     plnEl.textContent = "";
   }
@@ -2871,25 +2890,33 @@ function renderBudgetView(){
   requestAnimationFrame(()=>{
     BUDGET_CATS.forEach(c=>{
       const seg = stack.querySelector(`[data-key="${c.key}"]`);
-      const pct = grand>0 ? (totals[c.key]/grand*100) : 0;
+      const pct = grandRaw>0 ? (totals[c.key]/grandRaw*100) : 0;
       if(seg) seg.style.width = pct+"%";
     });
   });
 
   const cards = document.getElementById("budgetCards");
   cards.innerHTML = BUDGET_CATS.map(c=>{
-    const valEur = totals[c.key]/divisor;
-    const valShown = valEur*rate;
-    const sub = nbpRate!=null ? `<div class="bc-sub">≈ ${Math.round(usePln? valEur : valEur*nbpRate).toLocaleString("pl-PL")}${otherSuffix}</div>` : "";
+    const valNative = totals[c.key]/divisor;
+    const valShown = convertNativeTo(valNative, mainCurrency, nativeCurrency, nbpRate) ?? valNative;
+    const valOther = canConvert ? convertNativeTo(valNative, otherCurrency, nativeCurrency, nbpRate) : null;
+    const sub = valOther!=null ? `<div class="bc-sub">≈ ${Math.round(valOther).toLocaleString("pl-PL")} ${currencySymbol(otherCurrency)}</div>` : "";
     return `<div class="budget-card" style="background:${c.color}">
       <div class="bc-icon">${c.icon}</div>
       <div class="bc-label">${c.label}</div>
-      <div class="bc-value">${Math.round(valShown).toLocaleString("pl-PL")}${usePln?" zł":" €"}</div>
+      <div class="bc-value">${Math.round(valShown).toLocaleString("pl-PL")} ${currencySymbol(mainCurrency)}</div>
       ${sub}
     </div>`;
   }).join("");
 
-  const fmtLine = (l)=> `${Math.round(l.family/divisor*rate).toLocaleString("pl-PL")}${usePln?" zł":" €"}`;
+  const fmtLine = (l)=>{
+    const valNative = l.family/divisor;
+    const valShown = convertNativeTo(valNative, mainCurrency, nativeCurrency, nbpRate) ?? valNative;
+    return `${Math.round(valShown).toLocaleString("pl-PL")} ${currencySymbol(mainCurrency)}`;
+  };
+  // Rzeczywisty wydatek wpisujecie zawsze w walucie natywnej wycieczki (tej samej,
+  // w której podane jest "family" w planie) — niezależnie od przełącznika EUR/PLN
+  // użytego tylko do podglądu sum.
   const actualLineHtml = (l)=>{
     const actual = actualSpend[l.id];
     let delta = "";
@@ -2897,9 +2924,9 @@ function renderBudgetView(){
       const d = Number(actual) - l.family;
       const cls = d>0 ? "over" : d<0 ? "under" : "";
       const sign = d>0 ? "+" : "";
-      delta = `<span class="bd-delta ${cls}">${sign}${d.toFixed(0)}€</span>`;
+      delta = `<span class="bd-delta ${cls}">${sign}${d.toFixed(0)} ${currencySymbol(nativeCurrency)}</span>`;
     }
-    return `<span class="bd-actual">rzeczywiście: <input type="number" min="0" step="any" inputmode="decimal" data-actual-id="${l.id}" value="${actual!=null?actual:""}" placeholder="${l.family}€"></span>${delta}`;
+    return `<span class="bd-actual">rzeczywiście: <input type="number" min="0" step="any" inputmode="decimal" data-actual-id="${l.id}" value="${actual!=null?actual:""}" placeholder="${l.family}${currencySymbol(nativeCurrency)}"></span>${delta}`;
   };
   const bd = document.getElementById("budgetBreakdown");
   if(budgetScope==="trip"){
@@ -2940,6 +2967,7 @@ function renderTripSummary(){
     for(let i=1;i<dayVisited.length;i++) kmVisited += haversine(dayVisited[i-1], dayVisited[i]);
   });
 
+  const summaryCurrencySym = currencySymbol((ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.currency) || "EUR");
   const allLines = allBudgetLines();
   const planned = allLines.reduce((s,l)=>s+l.family,0);
   const withActual = allLines.filter(l=>actualSpend[l.id]!=null && actualSpend[l.id]!=="");
@@ -2960,13 +2988,13 @@ function renderTripSummary(){
     </div>
     <div class="summary-stat">
       <div class="lbl">Budżet: plan</div>
-      <div class="val">${Math.round(planned).toLocaleString("pl-PL")} €</div>
+      <div class="val">${Math.round(planned).toLocaleString("pl-PL")} ${summaryCurrencySym}</div>
       <div class="sub">cała rodzina, cały wyjazd</div>
     </div>
     <div class="summary-stat">
       <div class="lbl">Budżet: wydano</div>
-      <div class="val ${hasActual?deltaClass:""}">${hasActual? Math.round(actualTotal).toLocaleString("pl-PL")+" €" : "—"}</div>
-      <div class="sub">${hasActual? (actualTotal>planned? "więcej niż plan o "+Math.round(actualTotal-planned)+" €" : "mniej niż plan o "+Math.round(planned-actualTotal)+" €") : "wpiszcie realne wydatki poniżej"}</div>
+      <div class="val ${hasActual?deltaClass:""}">${hasActual? Math.round(actualTotal).toLocaleString("pl-PL")+" "+summaryCurrencySym : "—"}</div>
+      <div class="sub">${hasActual? (actualTotal>planned? "więcej niż plan o "+Math.round(actualTotal-planned)+" "+summaryCurrencySym : "mniej niż plan o "+Math.round(planned-actualTotal)+" "+summaryCurrencySym) : "wpiszcie realne wydatki poniżej"}</div>
     </div>`;
 }
 
@@ -2994,7 +3022,8 @@ function renderTipCalc(){
   const total = bill + tip;
   const perPerson = total/people;
   document.getElementById("tipResult").innerHTML = bill>0
-    ? `Napiwek: <b>${tip.toFixed(2)} €</b> · Razem: <b>${total.toFixed(2)} €</b> · Na osobę (${people}): <b>${perPerson.toFixed(2)} €</b>`
+    ? (()=>{ const sym = currencySymbol((ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.currency) || "EUR");
+        return `Napiwek: <b>${tip.toFixed(2)} ${sym}</b> · Razem: <b>${total.toFixed(2)} ${sym}</b> · Na osobę (${people}): <b>${perPerson.toFixed(2)} ${sym}</b>`; })()
     : `Wpiszcie kwotę rachunku, żeby zobaczyć podział.`;
 }
 ["tipBill","tipPct","tipPeople"].forEach(id=>{
@@ -3223,7 +3252,7 @@ function buildPrintReport(){
 
     items.forEach(it=>{
       const distHotel = haversine(HOTEL, it).toFixed(1);
-      const budgetTxt = it.budget ? it.budget.map(b=>`${b.label}: ${b.family}€`).join(" · ") : "";
+      const budgetTxt = it.budget ? it.budget.map(b=>`${b.label}: ${b.family}${currencySymbol(meta.currency||"EUR")}`).join(" · ") : "";
       html += `<div class="pr-item pri-${it.pri}" style="border-left-color:${CAT_COLORS[it.cat]}">
         <div class="pr-item-head">
           <span class="pr-time">${it.time}</span>
@@ -3251,20 +3280,26 @@ function buildPrintReport(){
   const totals = {transport:0,bilety:0,posilki:0,inne:0};
   lines.forEach(l=> totals[l.cat]+=l.family);
   const grand = Object.values(totals).reduce((a,b)=>a+b,0);
-  const plnTxt = nbpRate!=null ? ` (≈ ${Math.round(grand*nbpRate).toLocaleString("pl-PL")} zł wg kursu NBP z ${nbpDate.split("-").reverse().join(".")})` : "";
+  const prNativeCurrency = (ACTIVE_TRIP.meta && ACTIVE_TRIP.meta.currency) || "EUR";
+  const prSym = currencySymbol(prNativeCurrency);
+  const prFamilySize = Math.max(1, ((ACTIVE_TRIP.meta.family && ACTIVE_TRIP.meta.family.adults)||0)
+    + ((ACTIVE_TRIP.meta.family && ACTIVE_TRIP.meta.family.children && ACTIVE_TRIP.meta.family.children.length)||0));
+  const prOtherCurrency = prNativeCurrency==="EUR" ? "PLN" : prNativeCurrency==="PLN" ? "EUR" : null;
+  const prOtherVal = prOtherCurrency ? convertNativeTo(grand, prOtherCurrency, prNativeCurrency, nbpRate) : null;
+  const otherTxt = prOtherVal!=null ? ` (≈ ${Math.round(prOtherVal).toLocaleString("pl-PL")} ${currencySymbol(prOtherCurrency)} wg kursu NBP z ${nbpDate.split("-").reverse().join(".")})` : "";
 
   html += `<div class="pr-budget">
     <h2>Podsumowanie budżetu</h2>
-    <div class="pr-desc">Szacunek dla całej rodziny (4 osoby), bez cen lotów. Ceny posiłków to symulacja na podstawie średnich cen dań.</div>
+    <div class="pr-desc">Szacunek dla całej rodziny (${prFamilySize} ${plForm(prFamilySize,["osoba","osoby","osób"])}), bez cen lotów/dojazdu. Ceny posiłków to symulacja na podstawie średnich cen dań.</div>
     <table>
       <tr><th>Kategoria</th><th>Łącznie</th><th>Na osobę</th></tr>
       ${BUDGET_CATS.map(c=>`<tr>
         <td><span class="cat-swatch" style="background:${c.color}"></span>${c.icon} ${c.label}</td>
-        <td>${Math.round(totals[c.key]).toLocaleString("pl-PL")} €</td>
-        <td>${Math.round(totals[c.key]/4).toLocaleString("pl-PL")} €</td>
+        <td>${Math.round(totals[c.key]).toLocaleString("pl-PL")} ${prSym}</td>
+        <td>${Math.round(totals[c.key]/prFamilySize).toLocaleString("pl-PL")} ${prSym}</td>
       </tr>`).join("")}
     </table>
-    <div class="grand">Razem: ${Math.round(grand).toLocaleString("pl-PL")} € dla rodziny${plnTxt}</div>
+    <div class="grand">Razem: ${Math.round(grand).toLocaleString("pl-PL")} ${prSym} dla rodziny${otherTxt}</div>
   </div>`;
 
   document.getElementById("printReport").innerHTML = html;
@@ -3585,6 +3620,10 @@ if(hasAnyTrip){
   // domyślnie traktujemy je jak dotychczas, czyli jako dojazd samolotem.
   TRANSPORT_MODE = ACTIVE_TRIP.meta.transportMode || "plane";
   PARKING_SUGGESTIONS = ACTIVE_TRIP.parkingSuggestions || {};
+  // Jeśli dla tej wycieczki nikt jeszcze nie wybrał ręcznie waluty widoku budżetu,
+  // domyślnie pokazujemy walutę natywną wycieczki (np. PLN dla wycieczki krajowej)
+  // zamiast sztywnego EUR, które miało sens tylko dla wycieczek zagranicznych.
+  if(store.budgetCurrency==null && ACTIVE_TRIP.meta.currency==="PLN") budgetCurrency = "PLN";
 
   const destSuffix = TRANSPORT_MODE==="plane" ? " (przylot)" : TRANSPORT_MODE==="car" ? " (dojazd)" : " (przyjazd)";
   WX_CITIES = {

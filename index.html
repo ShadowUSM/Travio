@@ -212,7 +212,8 @@
 
   .pace-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);margin:16px 14px 0;padding:12px 14px;box-shadow:var(--shadow);transition:padding .25s ease}
   .pace-card h2{font-size:17px}
-  .pace-compact-row{display:flex;align-items:center;gap:10px}
+  .pace-compact-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pace-compact-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;white-space:nowrap;flex:0 0 auto}
   .pace-compact-row input[type=range]{flex:1;min-width:160px;accent-color:var(--blue)}
   .pace-toggle{flex:0 0 auto;width:34px;height:34px;border:1px solid var(--line);background:var(--paper);border-radius:50%;cursor:pointer;color:var(--blue);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:transform .2s ease,background .2s ease}
   .pace-toggle:hover{background:var(--paper-2)}
@@ -673,6 +674,7 @@
 <div id="view-trip">
   <div class="pace-card wrap" id="paceCard" style="margin-left:auto;margin-right:auto">
     <div class="pace-compact-row">
+      <span class="pace-compact-label">Tempo zwiedzania</span>
       <input type="range" min="1" max="3" step="1" value="2" id="paceSlider" aria-label="Intensywność zwiedzania">
       <button class="pace-toggle" id="paceToggleBtn" type="button" aria-expanded="false" aria-label="Rozwiń ustawienia tempa zwiedzania">▾</button>
     </div>
@@ -1968,20 +1970,20 @@ document.getElementById("viewTabsNav").addEventListener("click",(e)=>{
 document.getElementById("viewTabPrev").addEventListener("click",()=>switchAdjacentTab(-1));
 document.getElementById("viewTabNext").addEventListener("click",()=>switchAdjacentTab(1));
 
-// Przesunięcie palcem w lewo/prawo na treści zmienia główną zakładkę (Plan
-// podróży, Budżet…), tak samo jak strzałki obok paska zakładek. Wyłączone nad
-// mapą, suwakiem tempa, paskiem dni, samym paskiem zakładek i oknem
-// ciekawostek — tam przeciągnięcie ma znaczenie inne niż zmiana zakładki.
-(function setupSwipeViewTabs(){
-  const EXCLUDE_SELECTOR = "input, textarea, select, .leaflet-container, #daytabs, .viewtabs-shell, .facts-modal";
+// Przesunięcie palcem w lewo/prawo w zakładce "Plan podróży" zmienia dzień:
+// w prawo -> kolejny dzień, w lewo -> poprzedni dzień. Wyłączone nad mapą,
+// suwakiem tempa, paskiem dni, paskiem zakładek, oknem ciekawostek i osią
+// czasu dnia (ta ostatnia ma własne przewijanie w poziomie) — tam
+// przeciągnięcie ma znaczenie inne niż zmiana dnia.
+(function setupSwipeDayNav(){
+  const EXCLUDE_SELECTOR = "input, textarea, select, .leaflet-container, #daytabs, .viewtabs-shell, .facts-modal, .timeline-scroll";
   const MIN_DX = 60, MAX_DY = 60;
   let startX = null, startY = null, tracking = false;
   document.addEventListener("touchstart", (e)=>{
     tracking = false;
     if(e.touches.length !== 1) return;
     if(e.target.closest(EXCLUDE_SELECTOR)) return;
-    const shell = document.getElementById("viewTabsShell");
-    if(!shell || getComputedStyle(shell).display === "none") return;
+    if(currentView !== "trip") return;
     if(document.getElementById("factsModal").classList.contains("open")) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -1993,7 +1995,7 @@ document.getElementById("viewTabNext").addEventListener("click",()=>switchAdjace
     const t = e.changedTouches[0];
     const dx = t.clientX - startX, dy = t.clientY - startY;
     if(Math.abs(dx) < MIN_DX || Math.abs(dy) > MAX_DY || Math.abs(dx) < Math.abs(dy)) return;
-    switchAdjacentTab(dx < 0 ? 1 : -1);
+    switchAdjacentDay(dx > 0 ? 1 : -1);
   }, {passive:true});
 })();
 
@@ -2052,6 +2054,16 @@ function renderTabs(){
     b.onclick = ()=>{ currentDay=i; pickedForDistance=[]; saveStore({day:i}); renderAll(); };
     el.appendChild(b);
   });
+}
+function switchAdjacentDay(dir){
+  const nextIdx = Math.max(0, Math.min(DAYS.length-1, currentDay + dir));
+  if(nextIdx === currentDay) return;
+  currentDay = nextIdx;
+  pickedForDistance = [];
+  saveStore({day:currentDay});
+  renderAll();
+  const active = document.querySelector(".daytab.active");
+  if(active) active.scrollIntoView({behavior:"smooth", block:"nearest", inline:"center"});
 }
 
 /* ---------- RENDER: BUDGET + MATCH ROW ---------- */
@@ -2447,22 +2459,32 @@ function renderMap(){
     const marker = L.circleMarker([it.lat,it.lng],{radius:9, fillColor:color, color:"#fff", weight:2, fillOpacity:1}).addTo(markersLayer);
     let popupHtml = `<b>${i+1}. ${it.name}</b><br>${it.time} · ${CAT_LABELS[it.cat]}<br><a href="${it.maps}" target="_blank" rel="noopener">Google Maps ↗</a>`;
     marker.bindPopup(popupHtml);
-    if(it.wiki){
-      marker.on("popupopen", async ()=>{
-        const info = await fetchWikiImage(it.wiki);
-        if(info && info.src){
-          const photoTag = info.page ? `<a href="${info.page}" target="_blank" rel="noopener"><img class="popup-photo" src="${info.src}"></a>` : `<img class="popup-photo" src="${info.src}">`;
-          marker.setPopupContent(`${photoTag}<b>${i+1}. ${it.name}</b><br>${it.time} · ${CAT_LABELS[it.cat]}<br><a href="${it.maps}" target="_blank" rel="noopener">Google Maps ↗</a>`);
-        }
-      });
-    }
+    marker.on("popupopen", async ()=>{
+      const info = await resolveItemPhoto(it);
+      if(info && info.src){
+        const photoTag = info.page ? `<a href="${info.page}" target="_blank" rel="noopener"><img class="popup-photo" src="${info.src}"></a>` : `<img class="popup-photo" src="${info.src}">`;
+        marker.setPopupContent(`${photoTag}<b>${i+1}. ${it.name}</b><br>${it.time} · ${CAT_LABELS[it.cat]}<br><a href="${it.maps}" target="_blank" rel="noopener">Google Maps ↗</a>`);
+      }
+    });
     marker.on("click",()=>handlePick(it));
     latlngs.push([it.lat,it.lng]);
   });
   const hm = L.circleMarker([HOTEL.lat,HOTEL.lng],{radius:7,fillColor:"#22282E",color:"#fff",weight:2,fillOpacity:1}).addTo(markersLayer);
   hm.bindPopup(`<b>🏨 ${HOTEL.name}</b>`);
 
-  if(latlngs.length>1){ L.polyline(latlngs,{color:"#8A8370",weight:2,dashArray:"4,6"}).addTo(lineLayer); }
+  if(latlngs.length>1){
+    // Od razu rysujemy prostą linię (żeby coś było widać bez czekania na sieć), a w
+    // tle dociągamy prawdziwą trasę wzdłuż ulic z OSRM i podmieniamy nią linię, gdy
+    // dojedzie. Pieszo albo samochodem — zależnie od formy podróży tej wycieczki.
+    L.polyline(latlngs,{color:"#8A8370",weight:2,dashArray:"4,6"}).addTo(lineLayer);
+    const myToken = ++mapRouteToken;
+    const profile = TRANSPORT_MODE==="car" ? "driving" : "foot";
+    fetchDayRouteGeometry(items.map(it=>({lat:it.lat,lng:it.lng})), profile).then(coords=>{
+      if(myToken!==mapRouteToken || !coords) return; // dzień zmienił się w międzyczasie albo trasa niedostępna
+      lineLayer.clearLayers();
+      L.polyline(coords,{color:"#1B4664",weight:3,opacity:.75}).addTo(lineLayer);
+    });
+  }
   const allPts = latlngs.length? latlngs.concat([[HOTEL.lat,HOTEL.lng]]) : [[HOTEL.lat,HOTEL.lng]];
   map.fitBounds(allPts,{padding:[30,30]});
 
@@ -2486,6 +2508,23 @@ function handlePick(it){
 // Publiczny serwer demo OSRM — darmowy, ale bez gwarancji dostępności/limitów,
 // więc zawsze trzymamy w zapasie odległość w linii prostej (haversine) jako fallback.
 let distRequestToken = 0;
+let mapRouteToken = 0;
+// Trasa dnia na mapie: prawdziwa geometria wzdłuż ulic dla całej kolejności
+// punktów danego dnia (nie tylko odległość jednej pary, jak fetchRoute niżej).
+async function fetchDayRouteGeometry(points, profile){
+  if(points.length < 2) return null;
+  try{
+    const coordStr = points.map(p=>`${p.lng},${p.lat}`).join(";");
+    const url = `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("bad response");
+    const data = await res.json();
+    if(data.code==="Ok" && data.routes && data.routes[0] && data.routes[0].geometry){
+      return data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+    }
+    return null;
+  }catch(e){ return null; }
+}
 async function fetchRoute(a,b,profile){
   try{
     const url = `https://router.project-osrm.org/route/v1/${profile}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;

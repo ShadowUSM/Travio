@@ -579,7 +579,13 @@
   .update-banner button{background:var(--blue-deep);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
   .update-banner button:hover{opacity:.9}
 
-  footer{max-width:1180px;margin:26px auto 0;padding:0 18px;font-size:12px;color:var(--ink-soft)}
+  footer{max-width:1180px;margin:26px auto 0;padding:0 18px 20px;font-size:12px;color:var(--ink-soft)}
+  .footer-toggle{width:100%;display:flex;align-items:center;gap:8px;background:none;border:none;padding:6px 0;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;text-align:left}
+  .footer-toggle:hover{color:var(--heading)}
+  .footer-toggle .chev{margin-left:auto;transition:transform .25s ease}
+  .footer-toggle.open .chev{transform:rotate(180deg)}
+  .footer-body{max-height:0;overflow:hidden;transition:max-height .35s ease}
+  .footer-body-inner{padding-top:6px;line-height:1.5}
 
   /* Elementy z twardo wpisanymi (nie zmiennymi) jasnymi kolorami — w trybie
      ciemnym trzeba je nadpisać osobno, bo same zmienne CSS ich nie obejmują. */
@@ -976,7 +982,15 @@
 </div>
 
 <footer class="wrap">
-  Ceny biletów, godziny otwarcia i harmonogramy transportu warto zweryfikować jeszcze raz na stronach oficjalnych tuż przed wyjazdem — mogły się zmienić od czasu przygotowania tego planu. Zdjęcia pochodzą z Wikipedii (licencje Wikimedia Commons, kliknij zdjęcie, by przejść do artykułu) i mają charakter poglądowy — dla restauracji i mniejszych miejsc kliknij „Zobacz w Google Maps”, żeby zobaczyć realne, aktualne zdjęcia. Odległości na mapie liczone są w linii prostej.
+  <button class="footer-toggle" id="footerToggleBtn" type="button" aria-expanded="false" aria-controls="footerBody">
+    <span>ℹ️ Skąd biorą się dane w tej aplikacji</span>
+    <span class="chev">▾</span>
+  </button>
+  <div class="footer-body" id="footerBody">
+    <div class="footer-body-inner">
+      Ceny biletów, godziny otwarcia i harmonogramy transportu warto zweryfikować jeszcze raz na stronach oficjalnych tuż przed wyjazdem — mogły się zmienić od czasu przygotowania tego planu. Zdjęcia pochodzą z Wikipedii (licencje Wikimedia Commons, kliknij zdjęcie, by przejść do artykułu) i mają charakter poglądowy — dla restauracji i mniejszych miejsc kliknij „Zobacz w Google Maps”, żeby zobaczyć realne, aktualne zdjęcia. Odległości na mapie liczone są w linii prostej.
+    </div>
+  </div>
 </footer>
 
 <div id="printReport"></div>
@@ -3600,6 +3614,7 @@ function setupToggle(btnId, bodyId, useMaxHeight=true){
 }
 setupToggle("headerToggleBtn","headerDetails", false);
 setupToggle("filterToggleBtn","filterBody");
+setupToggle("footerToggleBtn","footerBody");
 
 document.getElementById("paceToggleBtn").addEventListener("click", ()=>{
   const card = document.getElementById("paceCard");

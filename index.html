@@ -170,7 +170,7 @@
 
   .wrap{max-width:1180px;margin:0 auto;padding:0 14px}
 
-  .weather-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);margin:16px 14px 0;padding:16px 18px;box-shadow:var(--shadow)}
+  .weather-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 0;padding:16px 18px;box-shadow:var(--shadow)}
   .weather-card h2{font-size:17px}
   .weather-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
   .wx-chip{flex:1;min-width:160px;background:var(--paper-2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px}
@@ -210,7 +210,7 @@
     .viewtabs-arrow.prev{left:4px}.viewtabs-arrow.next{right:4px}
   }
 
-  .pace-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);margin:16px 14px 0;padding:12px 14px;box-shadow:var(--shadow);transition:padding .25s ease}
+  .pace-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);margin:16px 0 0;padding:12px 14px;box-shadow:var(--shadow);transition:padding .25s ease}
   .pace-card h2{font-size:17px}
   .pace-compact-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .pace-compact-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;white-space:nowrap;flex:0 0 auto}
@@ -247,7 +247,7 @@
   .daytab.active .dd{color:var(--white)}
   .daytab.active .prog{color:#CFF2E8}
 
-  .daybody{display:grid;grid-template-columns:1fr;gap:16px;padding:10px 14px 0}
+  .daybody{display:grid;grid-template-columns:1fr;gap:16px;padding:10px 0 0}
   @media(min-width:900px){ .daybody{grid-template-columns:1.15fr 0.85fr;align-items:start} .mapcol{position:sticky;top:14px} }
 
   .daynote{background:#FBEFDD;border:1px solid #EAD3A0;color:#6B4A18;border-radius:10px;padding:10px 13px;font-size:13px;margin-bottom:12px}
@@ -257,7 +257,7 @@
   .rain-toggle-btn:hover{background:var(--paper-2)}
   .rain-toggle-btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
 
-  .day-route{background:var(--white);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:var(--radius);padding:12px 14px;margin:0 14px 12px;box-shadow:var(--shadow)}
+  .day-route{background:var(--white);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:var(--radius);padding:12px 14px;margin:0 0 12px;box-shadow:var(--shadow)}
   .day-route.end{border-left-color:var(--gold)}
   .day-route .route-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin-bottom:4px}
   .day-route .route-main{font-size:13.5px;line-height:1.45;color:var(--ink)}
@@ -359,7 +359,7 @@
   .fclear{margin-top:10px;font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--brick)}
   .no-results{font-size:13.5px;color:var(--ink-soft);padding:16px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius);background:var(--white)}
 
-  .timeline-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px 10px;margin:0 14px 16px}
+  .timeline-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px 10px;margin:0 0 16px}
   .timeline-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
   .timeline-head h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600}
   .timeline-now-label{font-size:12px;font-weight:700;color:var(--brick)}
@@ -415,7 +415,7 @@
   .distpanel .hint{font-size:12px;color:var(--ink-soft)}
 
   /* Settings view */
-  .panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin:16px 14px 0;box-shadow:var(--shadow)}
+  .panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin:16px 0 0;box-shadow:var(--shadow)}
   .chipgrid{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
   .chip{padding:9px 15px;border-radius:20px;border:1px solid var(--line);background:var(--white);cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink-soft)}
   .chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
@@ -646,7 +646,8 @@
 </header>
 <div class="tilestrip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
 
-<div class="weather-card wrap" style="margin-left:auto;margin-right:auto">
+<div class="wrap">
+<div class="weather-card">
   <h2>Pogoda</h2>
   <div class="weather-row" id="weatherRow">
     <div class="wx-chip loading" id="wxChip-home"><span class="icon">⏳</span><div class="info"><span class="city" id="wxCityHomeLabel">Wylot</span><span class="temp">—</span><span class="desc">ładowanie…</span></div></div>
@@ -656,6 +657,7 @@
     <button id="wxRefreshBtn">🔄 Odśwież pogodę</button>
     <span id="wxUpdated"></span>
   </div>
+</div>
 </div>
 
 <div class="viewtabs-shell wrap" id="viewTabsShell">
@@ -672,7 +674,8 @@
 </div>
 
 <div id="view-trip">
-  <div class="pace-card wrap" id="paceCard" style="margin-left:auto;margin-right:auto">
+  <div class="wrap">
+  <div class="pace-card" id="paceCard">
     <div class="pace-compact-row">
       <span class="pace-compact-label">Tempo zwiedzania</span>
       <input type="range" min="1" max="3" step="1" value="2" id="paceSlider" aria-label="Intensywność zwiedzania">
@@ -688,6 +691,7 @@
       <div class="budget-text"><span id="budgetLabel"></span><span id="budgetWindow"></span></div>
       <div class="match-row" id="matchRow"></div>
     </div>
+  </div>
   </div>
 
   <nav class="daytabs wrap" id="daytabs"></nav>
@@ -2601,7 +2605,8 @@ function renderTimeline(){
   if(!list.length){ card.style.display="none"; return; }
   card.style.display = "block";
 
-  const width = Math.max(680, list.length*130);
+  const availW = track.parentElement.clientWidth;
+  const width = Math.max(680, list.length*130, availW);
   track.style.width = width+"px";
   track.innerHTML = '<div class="tl-line"></div>';
 
@@ -2639,6 +2644,11 @@ function renderTimeline(){
   }
 }
 setInterval(()=>{ if(currentView==="trip") renderTimeline(); }, 60000);
+let resizeTimelineTimer = null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(resizeTimelineTimer);
+  resizeTimelineTimer = setTimeout(()=>{ if(currentView==="trip") renderTimeline(); }, 150);
+});
 
 /* ---------- RENDER: SETTINGS ---------- */
 function renderSettings(){

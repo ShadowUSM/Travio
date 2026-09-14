@@ -1970,10 +1970,10 @@ document.getElementById("viewTabsNav").addEventListener("click",(e)=>{
 document.getElementById("viewTabPrev").addEventListener("click",()=>switchAdjacentTab(-1));
 document.getElementById("viewTabNext").addEventListener("click",()=>switchAdjacentTab(1));
 
-// Przesunięcie palcem w lewo/prawo w zakładce "Plan podróży" zmienia dzień:
-// w prawo -> kolejny dzień, w lewo -> poprzedni dzień. Wyłączone nad mapą,
-// suwakiem tempa, paskiem dni, paskiem zakładek, oknem ciekawostek i osią
-// czasu dnia (ta ostatnia ma własne przewijanie w poziomie) — tam
+// Przesunięcie palcem w zakładce "Plan podróży" zmienia dzień: od prawej do
+// lewej -> kolejny dzień, od lewej do prawej -> poprzedni dzień. Wyłączone
+// nad mapą, suwakiem tempa, paskiem dni, paskiem zakładek, oknem ciekawostek
+// i osią czasu dnia (ta ostatnia ma własne przewijanie w poziomie) — tam
 // przeciągnięcie ma znaczenie inne niż zmiana dnia.
 (function setupSwipeDayNav(){
   const EXCLUDE_SELECTOR = "input, textarea, select, .leaflet-container, #daytabs, .viewtabs-shell, .facts-modal, .timeline-scroll";
@@ -1995,7 +1995,7 @@ document.getElementById("viewTabNext").addEventListener("click",()=>switchAdjace
     const t = e.changedTouches[0];
     const dx = t.clientX - startX, dy = t.clientY - startY;
     if(Math.abs(dx) < MIN_DX || Math.abs(dy) > MAX_DY || Math.abs(dx) < Math.abs(dy)) return;
-    switchAdjacentDay(dx > 0 ? 1 : -1);
+    switchAdjacentDay(dx < 0 ? 1 : -1);
   }, {passive:true});
 })();
 

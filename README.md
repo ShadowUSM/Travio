@@ -2,15 +2,6 @@
 
 Uniwersalna aplikacja do planowania wycieczek — działa z dowolnym miastem, obsługuje wiele wycieczek naraz i pracuje offline. Statyczna aplikacja jednoplikowa (bez backendu i bez builda) opakowana jako instalowalny PWA.
 
-## Uruchomienie GitHub Pages
-
-1. **Settings → Pages** w tym repozytorium.
-2. "Build and deployment" → **Source: Deploy from a branch**.
-3. Branch: `main`, folder: **/ (root)** → zapisz.
-4. Po chwili aplikacja będzie dostępna pod `https://<twoj-login>.github.io/travio/`.
-
-Wszystko jest już przygotowane pod hosting w katalogu głównym — nie trzeba nic dodatkowo budować ani konfigurować.
-
 ## Instalacja na telefonie
 
 Po wejściu na `https://<twoj-login>.github.io/travio/`:

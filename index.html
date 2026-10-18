@@ -220,6 +220,16 @@
 .welcomeTagline{
   max-width:430px;font-size:14px;line-height:1.55;color:rgba(255,255,255,.82);margin:0 0 24px
 }
+.welcomeTripTile{
+  display:flex;align-items:flex-end;position:relative;height:150px;border-radius:24px;overflow:hidden;
+  margin:0 0 18px;box-shadow:0 14px 34px rgba(0,0,0,.26);cursor:pointer;text-decoration:none;color:#fff
+}
+.welcomeTripTile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.welcomeTripTile:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,20,13,.1) 30%,rgba(5,20,13,.86) 100%)}
+.welcomeTripTileOverlay{position:relative;z-index:1;padding:16px 18px}
+.welcomeTripTileEyebrow{display:block;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--lime);margin-bottom:4px}
+.welcomeTripTileOverlay h3{font-family:Manrope;font-size:24px;letter-spacing:-.6px;margin:0}
+.welcomeTripTileDates{display:block;font-size:11px;color:rgba(255,255,255,.82);margin-top:3px}
 .welcomeButtons{display:grid;gap:10px}
 .welcomePrimary,.welcomeSecondary{
   width:100%;border-radius:22px;padding:15px 17px;font-family:Manrope;font-size:12px;font-weight:900;
@@ -651,6 +661,14 @@ img[src^="data:image/svg+xml"]{animation:travioPhotoPulse 2.4s ease-in-out infin
     </div>
     <div class="welcomeBrand">Travio</div>
     <p class="welcomeTagline">Twój osobisty planer podróży. Przygotuj nową wycieczkę z pomocą AI albo wgraj gotowy plan zapisany wcześniej w Travio.</p>
+    <a class="welcomeTripTile" id="welcomeTripTile" style="display:none" onclick="openUpcomingTripFromWelcome()">
+      <img id="welcomeTripTileImg" alt="">
+      <div class="welcomeTripTileOverlay">
+        <span class="welcomeTripTileEyebrow">Najbliższa wycieczka</span>
+        <h3 id="welcomeTripTileCity"></h3>
+        <span class="welcomeTripTileDates" id="welcomeTripTileDates"></span>
+      </div>
+    </a>
     <div class="welcomeButtons">
       <button class="welcomePrimary" onclick="startWelcomeAi()">✨ Stwórz wycieczkę z AI</button>
       <button class="welcomeSecondary" onclick="document.getElementById('welcomeTripFile').click()">⇧ Wgraj wycieczkę</button>
@@ -1299,7 +1317,11 @@ function renderHomeForTrip(){
   const heroText=document.getElementById('heroText');
   if(heroText) heroText.textContent=`${participantState.adults} dorosłych + ${participantState.children.length} ${participantState.children.length===1?'dziecko':'dzieci'} · ${cities||city?.name||''} · ${trip.dateStart?plDate(trip.dateStart):''}${trip.dateEnd?' – '+plDate(trip.dateEnd):''}.`;
   const slides=[...document.querySelectorAll('#heroSlides .heroSlide img')];
-  if(city && (city.name||'').toLowerCase()!=='barcelona'){
+  // v58: usunięto stary wyjątek pomijający pobieranie zdjęcia, gdy aktywne miasto
+  // nazywało się dokładnie "Barcelona" (pozostałość po czasach, gdy Barcelona była
+  // jedyną, na sztywno wbudowaną przykładową wycieczką) — blokował to zdjęcie hero
+  // dla każdej PRAWDZIWEJ wycieczki do Barcelony.
+  if(city){
     const imgs=cityVisualPhotos(city);
     if(!imgs.length)imgs.push(photoForCity(city));
     slides.forEach((img,i)=>img.src=imgs[i%imgs.length]);
@@ -3127,6 +3149,54 @@ function showLaunchWelcome(){
   w.classList.add('show');
   w.setAttribute('aria-hidden','false');
   document.title='Travio';
+  renderWelcomeUpcomingTile();
+}
+// Kafelek najbliższej wycieczki na ekranie startowym — pokazuje nazwę miasta i daty,
+// żeby było widać dokąd jedziemy jeszcze zanim otworzy się pełną listę wycieczek.
+function welcomeTripCityName(t){
+  return t?.city||t?.cities?.[0]?.name||t?.title||'Wycieczka';
+}
+function renderWelcomeUpcomingTile(){
+  const tile=document.getElementById('welcomeTripTile');if(!tile)return;
+  const list=upcomingTripRecords();
+  if(!list.length){tile.style.display='none';delete tile.dataset.tripId;return}
+  const rec=list[0],t=rec.data?.trip||{};
+  const cityName=welcomeTripCityName(t);
+  const range=[t.dateStart?plDate(t.dateStart):'',t.dateEnd?plDate(t.dateEnd):''].filter(Boolean).join(' – ');
+  document.getElementById('welcomeTripTileCity').textContent=cityName;
+  document.getElementById('welcomeTripTileDates').textContent=range||'Brak dat';
+  const img=document.getElementById('welcomeTripTileImg');
+  const cityObj=(t.cities||[])[0];
+  img.src=cityObj?.heroImages?.[0]||genericCityPlaceholder(cityName);
+  img.alt=cityName;
+  tile.dataset.tripId=rec.id;
+  tile.style.display='flex';
+  if(cityObj&&!cityObj.heroImages?.length)ensureWelcomeTileCityPhoto(rec,cityObj);
+}
+// Jak ensureCityHeroPhoto, ale dla wycieczki, która niekoniecznie jest teraz
+// aktywna (kafelek na ekranie startowym) — zapisuje bezpośrednio do właściwego
+// rekordu w bibliotece zamiast przez saveTripLibrary(), która zawsze nadpisuje
+// AKTUALNIE wgraną wycieczkę i skasowałaby to zdjęcie przy następnym zapisie.
+async function ensureWelcomeTileCityPhoto(rec,city){
+  if(!rec||!city||city.heroImages?.length)return;
+  try{
+    const q=[city.name,city.country].filter(Boolean).join(' ');
+    let img=await wikiImageFor(q,city.name);
+    if(!img&&city.heroPhotoQuery)img=await wikiImageFor(city.heroPhotoQuery,city.name);
+    if(!img)return;
+    const liveRec=tripLibrary.find(r=>r.id===rec.id);if(!liveRec)return;
+    const liveCity=liveRec.data?.trip?.cities?.[0];if(!liveCity)return;
+    liveCity.heroImages=[img];
+    persistTripLibrary();
+    if(document.getElementById('welcomeTripTile')?.dataset.tripId===rec.id){
+      const img2=document.getElementById('welcomeTripTileImg');
+      if(img2)img2.src=img;
+    }
+  }catch(e){}
+}
+function openUpcomingTripFromWelcome(){
+  const id=document.getElementById('welcomeTripTile')?.dataset.tripId;
+  if(id)activateTrip(id);
 }
 function tripEndDate(rec){
   const s=rec?.data?.trip?.dateEnd;if(!s)return null;
